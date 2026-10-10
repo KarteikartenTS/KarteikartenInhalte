@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <div class="watermark" id="watermark" aria-hidden="true"></div>
   <header class="topbar">
     <button class="icon-btn" id="btn-back" aria-label="Zurück" hidden>
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z" fill="currentColor"/></svg>
@@ -24,7 +25,7 @@
       <h1 id="title">TÜV SÜD Akademie</h1>
       <div id="subtitle" class="subtitle"></div>
     </div>
-    <!-- Platz für das TÜV-SÜD-Logo, sobald die Datei freigegeben ist -->
+    <img class="top-logo" src="icons/tuev-sued-logo.svg" alt="TÜV SÜD" width="36" height="36">
     <button class="icon-btn" id="btn-menu" aria-label="Menü">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>
     </button>
@@ -44,6 +45,7 @@
       <p>Deine Module werden automatisch geladen, sobald du mit dem Internet verbunden bist.</p>
     </div>
     <p id="today" class="today"></p>
+    <p id="total" class="total"></p>
   </main>
 
   <main id="view-study" class="view" hidden>

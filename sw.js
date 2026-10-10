@@ -1,7 +1,7 @@
 // Offline-Unterstützung. App-Dateien: zuerst Cache, im Hintergrund auffrischen.
 // Karten (cards.json, modules.json): zuerst Netz, offline aus dem Cache. Medien: Cache, sonst Netz.
-const CACHE = 'karteikarten-v1';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+const CACHE = 'karteikarten-v3';
+const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/tuev-sued-logo.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -41,6 +41,7 @@ button { font: inherit; cursor: pointer; }
 .topbar h1 { margin: 0; font-size: 21px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .subtitle { font-size: 14px; opacity: .9; }
 .subtitle:empty { display: none; }
+.top-logo { width: 36px; height: 36px; flex-shrink: 0; filter: brightness(0) invert(1); opacity: .95; }
 .icon-btn {
   background: none; border: 0; color: inherit; width: 44px; height: 44px;
   display: grid; place-items: center; border-radius: 50%;
@@ -55,8 +56,27 @@ button { font: inherit; cursor: pointer; }
 .menu button { background: none; border: 0; text-align: left; padding: 14px 16px; color: var(--text); }
 .menu button:active { background: var(--row-hover); }
 
+/* TÜV-SÜD-Logo als dezentes Wasserzeichen hinter Übersicht und "Geschafft" */
+.watermark {
+  position: fixed; left: 50%; top: 55%; z-index: 0; pointer-events: none;
+  width: min(70vw, 420px); aspect-ratio: 1; transform: translate(-50%, -50%);
+  background: url("icons/tuev-sued-logo.svg") center / contain no-repeat;
+  opacity: .07;
+}
+.view { position: relative; z-index: 1; }
+.total {
+  position: fixed; left: 0; right: 0; bottom: calc(var(--bar-bottom) + 10px); z-index: 2;
+  margin: 0; text-align: center; font-size: 13px; color: var(--muted); pointer-events: none;
+}
+.about-logo { display: block; width: 72px; height: 72px; margin: 0 auto 8px; }
+.about h3 { font-size: 15px; margin: 16px 0 4px; }
+.about ul { margin: 0; padding-left: 18px; }
+.about li { margin: 2px 0; }
+.about .meta { color: var(--muted); font-size: 13px; }
+.dialog-box { max-height: calc(100dvh - 32px); overflow-y: auto; }
+
 /* Deckliste */
-.view { padding-bottom: calc(var(--bar-bottom) + 24px); }
+.view { padding-bottom: calc(var(--bar-bottom) + 48px); }
 .deck-list { list-style: none; margin: 0; padding: 0; }
 .deck {
   display: flex; align-items: center; min-height: 56px;

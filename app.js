@@ -177,6 +177,7 @@ const $ = (id) => document.getElementById(id);
 function show(view) {
   for (const v of ['view-decks', 'view-study', 'view-done']) $(v).hidden = v !== view;
   $('btn-back').hidden = view === 'view-decks';
+  $('watermark').hidden = view === 'view-study';
 }
 
 function renderDecks() {
@@ -222,6 +223,8 @@ function renderDecks() {
   $('today').textContent = state.cards.length
     ? `Heute ${d.studied} ${d.studied === 1 ? 'Karte' : 'Karten'} in ${Math.round(d.seconds / 60)} Min gelernt`
     : '';
+  const n = state.cards.length;
+  $('total').textContent = n ? `${n.toLocaleString('de-DE')} Karteikarten geladen` : '';
   show('view-decks');
 }
 
@@ -303,6 +306,40 @@ function dialog(title, html) {
   $('dialog').hidden = false;
 }
 
+// ---------- Über diese App ----------
+const LINK = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+function aboutHtml() {
+  const modules = state.modules.map((m) => `${m.title} (${m.cards.length} Karten)`).join(', ') || 'noch nicht geladen';
+  return `<div class="about">
+    <img class="about-logo" src="icons/tuev-sued-logo.svg" alt="TÜV SÜD">
+    <p><b>Karteikarten-App der TÜV SÜD Akademie</b><br>
+    Prototyp im Auftrag der TÜV SÜD Akademie. Web-Version für iPhone, iPad und PC.</p>
+    <p class="meta">Geladen: ${state.cards.length} Karteikarten · Module: ${modules}</p>
+
+    <h3>TÜV SÜD Akademie</h3>
+    <ul>
+      <li>${LINK('https://www.tuvsud.com/de-de/store/akademie', 'Website der TÜV SÜD Akademie')}</li>
+      <li>${LINK('https://de-internal-learning.tuvsud.com/dashboard', 'Lernportal')} (nur mit TÜV-SÜD-Zugang)</li>
+      <li>${LINK('https://www.tuvsud.com/de-de/store/akademie/impressum-akademie', 'Impressum der TÜV SÜD Akademie')}</li>
+      <li>${LINK('https://www.tuvsud.com/de-de/store/akademie/datenschutzinformation', 'Datenschutzinformation der TÜV SÜD Akademie')}</li>
+    </ul>
+
+    <h3>App und Inhalte</h3>
+    <ul>
+      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid/releases/tag/v0.1.0-demo', 'Android-App herunterladen')}</li>
+      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenInhalte', 'Web-App und Karteikarten auf GitHub')}</li>
+      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid', 'Quellcode der Android-App auf GitHub')} (GPL-3.0, basiert auf AnkiDroid)</li>
+    </ul>
+
+    <h3>Hinweise</h3>
+    <ul>
+      <li>Demo-Version: Die Karten sind unvollständig und dienen nur dem Kennenlernen.</li>
+      <li>Keine Anmeldung, kein Tracking. Dein Lernstand wird nur auf diesem Gerät gespeichert.</li>
+      <li>Die Seite wird über GitHub Pages ausgeliefert. Dabei verarbeitet GitHub technisch notwendige Verbindungsdaten.</li>
+    </ul>
+  </div>`;
+}
+
 // ---------- Karla ----------
 const TIPS = [
   ['Hallo, ich bin Karla!', 'Ich bin deine Lernkarte und zeige dir in ein paar Schritten, was diese App kann. Tippe auf „Weiter“.'],
@@ -361,14 +398,7 @@ function bind() {
     const action = e.target.dataset.action;
     if (action === 'assistant') karla(true);
     if (action === 'update') await refresh(true);
-    if (action === 'about') {
-      dialog('Über diese App', `
-        <p><b>Karteikarten-App der TÜV SÜD Akademie</b><br>Web-Version (Demo) für iPhone und iPad.</p>
-        <p>Die Demo enthält das Modul PTI 1. Die Karten sind unvollständig und dienen nur dem Kennenlernen.</p>
-        <p>Für Android gibt es die App zum Installieren:
-        <a href="https://github.com/KarteikartenTS/KarteikartenAndroid/releases" target="_blank" rel="noopener">Android-Download</a>.</p>
-        <p>Dein Lernstand wird nur auf diesem Gerät gespeichert.</p>`);
-    }
+    if (action === 'about') dialog('Über diese App', aboutHtml());
   });
   $('karla-next').addEventListener('click', () => { if (tip === TIPS.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
   $('karla-back').addEventListener('click', () => { tip = Math.max(0, tip - 1); renderTip(); wiggle(); });
