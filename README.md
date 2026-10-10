@@ -1,4 +1,19 @@
-# Karteikarten-Inhalte (Demo)
+# 📚 Jetzt lernen
+
+## 👉 [karteikartents.github.io/KarteikartenInhalte](https://karteikartents.github.io/KarteikartenInhalte/)
+
+**Einfach den Link antippen.** Funktioniert direkt im Browser auf iPhone, iPad, Android und PC, ohne Anmeldung.
+
+| Gerät | So geht's |
+|---|---|
+| 📱 **iPhone / iPad** | Link in **Safari** öffnen → unten auf **Teilen** tippen → **„Zum Home-Bildschirm“**. Dann startet die Karteikarten-App wie eine richtige App. |
+| 🤖 **Android** | Die App zum Installieren gibt es hier: **[Android-App herunterladen](https://github.com/KarteikartenTS/KarteikartenAndroid/releases/tag/v0.1.0-demo)** |
+
+> Demo-Version: enthält das Modul **PTI 1**. Die Karten sind unvollständig und dienen nur dem Kennenlernen.
+
+---
+
+## Für Entwickler: Karteikarten-Inhalte (Demo)
 
 Öffentliche Auslieferung der Karteikarten-Module für die Karteikarten-App der TÜV SÜD Akademie (Prototyp).
 
