@@ -93,6 +93,7 @@ button { font: inherit; cursor: pointer; }
 .deck .toggle.none { visibility: hidden; }
 .deck .name { flex: 1; font-size: 19px; font-weight: 700; min-width: 0; padding-right: 10px; overflow-wrap: anywhere; hyphens: auto; }
 .deck .counts { display: flex; gap: 10px; flex-shrink: 0; font-size: 17px; font-variant-numeric: tabular-nums; }
+.c-total { color: var(--text); font-weight: 600; }
 .c-new { color: var(--c-new); }
 .c-learn { color: var(--c-learn); }
 .c-review { color: var(--c-review); }

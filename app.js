@@ -54,7 +54,11 @@ const parentsOf = (deck) => deck.split('::').map((_, i, a) => a.slice(0, i + 1).
 const inDeck = (card, deck) => card.deck === deck || card.deck.startsWith(deck + '::');
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
 
-function newLeft(deck) { return Math.max(0, NEW_PER_DAY - (daily().newSeen[deck] || 0)); }
+// Hauptordner (Modul) ohne eigenes Limit, es zählen nur die Limits der Kapitel
+function newLeft(deck) {
+  if (!deck.includes('::')) return Infinity;
+  return Math.max(0, NEW_PER_DAY - (daily().newSeen[deck] || 0));
+}
 
 /** Neue Karten, die heute in [deck] noch drankommen dürfen (Limits des Stapels und seiner Unterstapel). */
 function newCardsFor(deck) {
@@ -201,10 +205,12 @@ function renderDecks() {
         <svg viewBox="0 0 24 24" width="24" height="24"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z" fill="currentColor"/></svg>
       </button>
       <span class="name"></span>
-      <span class="counts">
-        <span class="c-new ${c.n ? '' : 'zero'}">${c.n}</span>
+      <span class="counts">${level === 0
+        // Hauptordner: nur die Gesamtzahl der Karteikarten im Ordner
+        ? `<span class="c-total" title="Karteikarten insgesamt">${state.cards.filter((x) => inDeck(x, deck)).length}</span>`
+        : `<span class="c-new ${c.n ? '' : 'zero'}">${c.n}</span>
         <span class="c-learn ${c.l ? '' : 'zero'}">${c.l}</span>
-        <span class="c-review ${c.r ? '' : 'zero'}">${c.r}</span>
+        <span class="c-review ${c.r ? '' : 'zero'}">${c.r}</span>`}
       </span>`;
     li.querySelector('.name').textContent = parts[level];
     li.querySelector('.toggle').addEventListener('click', (e) => {
