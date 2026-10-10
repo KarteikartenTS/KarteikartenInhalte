@@ -102,6 +102,35 @@ button { font: inherit; cursor: pointer; }
 .empty { text-align: center; padding: 64px 24px; color: var(--muted); }
 .empty img { border-radius: 20px; }
 
+/* Eintrag "Zahlen & Daten" */
+.deck.virtual .name { color: var(--blue); }
+.deck.virtual .name::before {
+  content: "123"; display: inline-block; margin-right: 8px; padding: 1px 5px; border-radius: 4px;
+  background: var(--blue); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 3px;
+}
+
+/* Statistik */
+.stats { padding: 8px 16px calc(var(--bar-bottom) + 48px); max-width: 720px; margin: 0 auto; }
+.stats h2 { font-size: 16px; margin: 22px 0 8px; }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.kpi { background: #F3F6FA; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.kpi span { font-size: 13px; color: var(--muted); }
+.kpi b { font-size: 26px; font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
+.kpi small { font-size: 12px; color: var(--muted); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.prow { margin: 8px 0; }
+.plabel { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 3px; }
+.pnum { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.pbar, .abar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #EEF1F4; }
+.pbar span, .abar span { display: block; height: 100%; }
+.arow { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.arow .pnum { text-align: right; }
+.stats svg { width: 100%; height: auto; display: block; }
+.stats svg .axis { font-size: 10px; fill: var(--muted); }
+.stats svg .base { stroke: #C4C7CC; stroke-width: 1; }
+.hint { color: var(--muted); font-size: 13px; }
+
 /* Lernen */
 #view-study { display: flex; flex-direction: column; height: calc(100dvh - 64px - var(--bar-top)); padding-bottom: 0; }
 .counts-bar { display: flex; gap: 12px; padding: 6px 16px; background: #B3E0F7; font-variant-numeric: tabular-nums; }

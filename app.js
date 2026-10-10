@@ -19,6 +19,12 @@ const KEY_DAILY = 'tuev.daily.v1';
 const KEY_VERSIONS = 'tuev.versions.v1';
 const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
+const KEY_REVLOG = 'tuev.revlog.v1';
+
+// Lernmodus "Zahlen & Daten": alle Karten eines Moduls mit dem Tag aus der Content-Pipeline
+const NUM_TAG = 'Zahlen';
+const NUM_NAME = 'Zahlen & Daten';
+const NUM_KEY = '#zahlen';
 
 // ---------- Speicher ----------
 function load(key, fallback) {
@@ -32,6 +38,7 @@ const state = {
   modules: [],                      // {id, title, version, cards, styles}
   cards: [],                        // alle Karten aller Module, mit .module und .order
   progress: load(KEY_PROGRESS, {}),
+  revlog: load(KEY_REVLOG, []),
   daily: load(KEY_DAILY, {}),
   collapsed: load(KEY_COLLAPSED, {}),
   deck: null,                       // aktuell gelernter Stapel
@@ -51,7 +58,13 @@ function daily() {
 
 // ---------- Stapel ----------
 const parentsOf = (deck) => deck.split('::').map((_, i, a) => a.slice(0, i + 1).join('::'));
-const inDeck = (card, deck) => card.deck === deck || card.deck.startsWith(deck + '::');
+const isVirtual = (deck) => deck.endsWith('::' + NUM_KEY);
+const rootOf = (deck) => deck.split('::')[0];
+const deckLabel = (deck) => (isVirtual(deck) ? NUM_NAME : deck.split('::').pop());
+/** Gehört die Karte zum Stapel? Beim Eintrag "Zahlen & Daten": alle getaggten Karten des Moduls. */
+const inDeck = (card, deck) => (isVirtual(deck)
+  ? rootOf(card.deck) === rootOf(deck) && (card.tags || []).includes(NUM_TAG)
+  : card.deck === deck || card.deck.startsWith(deck + '::'));
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
 
 // Hauptordner (Modul) ohne eigenes Limit, es zählen nur die Limits der Kapitel
@@ -68,7 +81,7 @@ function newCardsFor(deck) {
     if (!inDeck(c, deck) || progressOf(c).t !== 0) continue;
     if (left[deck] <= 0) break;
     // Limits aller Stapel zwischen [deck] und dem Kartenstapel
-    const chain = parentsOf(c.deck).filter((d) => d === deck || d.startsWith(deck + '::'));
+    const chain = isVirtual(deck) ? [deck] : parentsOf(c.deck).filter((d) => d === deck || d.startsWith(deck + '::'));
     if (chain.some((d) => (left[d] ??= newLeft(d)) <= 0)) continue;
     chain.forEach((d) => left[d]--);
     out.push(c);
@@ -179,13 +192,18 @@ async function loadContent() {
 const $ = (id) => document.getElementById(id);
 
 function show(view) {
-  for (const v of ['view-decks', 'view-study', 'view-done']) $(v).hidden = v !== view;
+  for (const v of ['view-decks', 'view-study', 'view-done', 'view-stats']) $(v).hidden = v !== view;
   $('btn-back').hidden = view === 'view-decks';
   $('watermark').hidden = view === 'view-study';
 }
 
 function renderDecks() {
-  const decks = [...new Set(state.cards.flatMap((c) => parentsOf(c.deck)))].sort((a, b) => a.localeCompare(b, 'de'));
+  const real = [...new Set(state.cards.flatMap((c) => parentsOf(c.deck)))].sort((a, b) => a.localeCompare(b, 'de'));
+  // Je Modul den Eintrag "Zahlen & Daten" direkt unter dem Hauptordner einfügen
+  const decks = real.flatMap((d) => {
+    const v = `${d}::${NUM_KEY}`;
+    return !d.includes('::') && state.cards.some((c) => inDeck(c, v)) ? [d, v] : [d];
+  });
   const list = $('deck-list');
   list.textContent = '';
   let due = 0;
@@ -193,12 +211,12 @@ function renderDecks() {
     const parts = deck.split('::');
     const level = parts.length - 1;
     if (parentsOf(deck).slice(0, -1).some((d) => state.collapsed[d])) continue;
-    const hasChildren = decks.some((d) => d.startsWith(deck + '::'));
+    const hasChildren = !isVirtual(deck) && decks.some((d) => d.startsWith(deck + '::') && !isVirtual(d));
     const c = countsFor(deck);
     if (level === 0) due += c.n + c.l + c.r;
 
     const li = document.createElement('li');
-    li.className = 'deck';
+    li.className = isVirtual(deck) ? 'deck virtual' : 'deck';
     li.style.setProperty('--level', level);
     li.innerHTML = `
       <button class="toggle ${hasChildren ? (state.collapsed[deck] ? 'collapsed' : '') : 'none'}" aria-label="Kapitel auf- oder zuklappen">
@@ -212,7 +230,7 @@ function renderDecks() {
         <span class="c-learn ${c.l ? '' : 'zero'}">${c.l}</span>
         <span class="c-review ${c.r ? '' : 'zero'}">${c.r}</span>`}
       </span>`;
-    li.querySelector('.name').textContent = parts[level];
+    li.querySelector('.name').textContent = deckLabel(deck);
     li.querySelector('.toggle').addEventListener('click', (e) => {
       e.stopPropagation();
       state.collapsed[deck] = !state.collapsed[deck];
@@ -236,7 +254,7 @@ function renderDecks() {
 
 function startStudy(deck) {
   state.deck = deck;
-  $('title').textContent = deck.split('::').pop();
+  $('title').textContent = deckLabel(deck);
   nextInStudy();
 }
 
@@ -288,9 +306,15 @@ function answer(ease) {
   const { p, wasNew } = schedule(card, ease);
   state.progress[card.id] = p;
   const d = daily();
-  if (wasNew) for (const deck of parentsOf(card.deck)) d.newSeen[deck] = (d.newSeen[deck] || 0) + 1;
+  const decks = parentsOf(card.deck).concat(isVirtual(state.deck) ? [state.deck] : []);
+  if (wasNew) for (const deck of decks) d.newSeen[deck] = (d.newSeen[deck] || 0) + 1;
+  const seconds = Math.min(60, (Date.now() - state.shownAt) / 1000);
   d.studied++;
-  d.seconds += Math.min(60, (Date.now() - state.shownAt) / 1000);
+  d.seconds += seconds;
+  // Lernprotokoll für die Statistik (begrenzt, damit der Speicher nicht vollläuft)
+  state.revlog.push({ t: Date.now(), d: today(), id: card.id, e: ease, s: Math.round(seconds), n: wasNew ? 1 : 0 });
+  if (state.revlog.length > 20000) state.revlog.splice(0, state.revlog.length - 20000);
+  save(KEY_REVLOG, state.revlog);
   save(KEY_PROGRESS, state.progress);
   save(KEY_DAILY, state.daily);
   nextInStudy();
@@ -310,6 +334,90 @@ function dialog(title, html) {
   $('dialog-title').textContent = title;
   $('dialog-text').innerHTML = html;
   $('dialog').hidden = false;
+}
+
+// ---------- Statistik ----------
+const COLORS = { unseen: '#D9DDE2', working: '#7FB2E5', solid: '#005CA9', bar: '#005CA9', again: '#D32F2F', hard: '#455A64', good: '#4CAF50', easy: '#005CA9' };
+const SOLID_DAYS = 21;   // ab diesem Intervall gilt eine Karte als gefestigt (wie Anki "ausgereift")
+const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+/** Einfaches Säulendiagramm als SVG. values: Zahlen, labels: Beschriftung je Säule (leer = keine). */
+function columns(values, labels, title) {
+  const w = 340, h = 150, top = 14, bottom = 22, n = values.length;
+  const max = Math.max(1, ...values);
+  const bw = w / n;
+  const bars = values.map((v, i) => {
+    const bh = ((h - top - bottom) * v) / max;
+    const x = i * bw + bw * 0.15, y = h - bottom - bh;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(bh, v ? 1 : 0).toFixed(1)}" rx="2" fill="${COLORS.bar}"><title>${esc(labels[i] || '')}: ${v}</title></rect>`
+      + (labels[i] ? `<text x="${(i * bw + bw / 2).toFixed(1)}" y="${h - 6}" text-anchor="middle" class="axis">${esc(labels[i])}</text>` : '');
+  }).join('');
+  return `<svg viewBox="-16 0 ${w + 32} ${h}" role="img" aria-label="${esc(title)}">
+    <line x1="0" x2="${w}" y1="${h - bottom}" y2="${h - bottom}" class="base"/>
+    <text x="0" y="10" class="axis">max. ${max}</text>${bars}</svg>`;
+}
+
+function renderStats() {
+  const t = today();
+  const log = state.revlog;
+  const days = [...new Set(log.map((r) => r.d))].sort((a, b) => b - a);
+  let streak = 0;
+  for (let d = days.includes(t) ? t : t - 1; days.includes(d); d--) streak++;
+  const seen = state.cards.filter((c) => progressOf(c).t !== 0);
+  const solid = state.cards.filter((c) => progressOf(c).t === 2 && progressOf(c).ivl >= SOLID_DAYS);
+  const todayCount = log.filter((r) => r.d === t).length;
+
+  // Lernverlauf der letzten 30 Tage
+  const hist = Array.from({ length: 30 }, (_, i) => log.filter((r) => r.d === t - 29 + i).length);
+  const histLabels = hist.map((_, i) => (i % 7 === 1 ? new Date((t - 29 + i) * 86400000).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : ''));
+  // Fällige Wiederholungen der nächsten 14 Tage
+  const ahead = Array.from({ length: 14 }, (_, i) => state.cards.filter((c) => {
+    const p = progressOf(c);
+    return p.t === 2 ? Math.max(p.due, t) === t + i : (p.t === 1 || p.t === 3) && i === 0;
+  }).length);
+  const aheadLabels = ahead.map((_, i) => (i === 0 ? 'heute' : i % 3 === 0 ? `+${i}` : ''));
+  // Antworten der letzten 30 Tage
+  const recent = log.filter((r) => r.d > t - 30);
+  const answers = [1, 2, 3, 4].map((e) => recent.filter((r) => r.e === e).length);
+  const total = Math.max(1, recent.length);
+
+  // Fortschritt je Kapitel (+ Zahlen & Daten)
+  const rows = [...new Set(state.cards.map((c) => c.deck))].sort((a, b) => a.localeCompare(b, 'de'));
+  for (const root of new Set(rows.map(rootOf))) if (state.cards.some((c) => inDeck(c, `${root}::${NUM_KEY}`))) rows.unshift(`${root}::${NUM_KEY}`);
+  const progressRows = rows.map((deck) => {
+    const cards = state.cards.filter((c) => inDeck(c, deck));
+    const s = cards.filter((c) => progressOf(c).t === 2 && progressOf(c).ivl >= SOLID_DAYS).length;
+    const w = cards.filter((c) => progressOf(c).t !== 0).length - s;
+    const u = cards.length - s - w;
+    const pct = (x) => ((100 * x) / Math.max(1, cards.length)).toFixed(1);
+    return `<div class="prow"><div class="plabel"><span>${esc(deckLabel(deck))}</span><span class="pnum">${Math.round((100 * (s + w)) / Math.max(1, cards.length))} %</span></div>
+      <div class="pbar" title="${s} gefestigt, ${w} in Arbeit, ${u} noch neu">
+        <span style="width:${pct(s)}%;background:${COLORS.solid}"></span><span style="width:${pct(w)}%;background:${COLORS.working}"></span><span style="width:${pct(u)}%;background:${COLORS.unseen}"></span>
+      </div></div>`;
+  }).join('');
+
+  $('stats').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><span>Heute</span><b>${todayCount}</b><small>Antworten</small></div>
+      <div class="kpi"><span>Lernserie</span><b>${streak}</b><small>${streak === 1 ? 'Tag' : 'Tage'} in Folge</small></div>
+      <div class="kpi"><span>Begonnen</span><b>${seen.length}</b><small>von ${state.cards.length} Karten</small></div>
+      <div class="kpi"><span>Gefestigt</span><b>${solid.length}</b><small>Intervall ≥ ${SOLID_DAYS} Tage</small></div>
+    </div>
+    <h2>Fortschritt je Kapitel</h2>
+    <div class="legend"><span><i style="background:${COLORS.solid}"></i>gefestigt</span><span><i style="background:${COLORS.working}"></i>in Arbeit</span><span><i style="background:${COLORS.unseen}"></i>noch neu</span></div>
+    ${progressRows}
+    <h2>Lernverlauf (30 Tage)</h2>
+    ${columns(hist, histLabels, 'Antworten pro Tag in den letzten 30 Tagen')}
+    <h2>Fällig in den nächsten 14 Tagen</h2>
+    ${columns(ahead, aheadLabels, 'Fällige Karten pro Tag in den nächsten 14 Tagen')}
+    <h2>Deine Antworten (30 Tage)</h2>
+    ${recent.length ? `<div class="answers">${[['Nochmal', COLORS.again], ['Schwer', COLORS.hard], ['Gut', COLORS.good], ['Einfach', COLORS.easy]].map(([name, color], i) => `
+      <div class="arow"><span>${name}</span><div class="abar"><span style="width:${((100 * answers[i]) / total).toFixed(1)}%;background:${color}"></span></div><span class="pnum">${Math.round((100 * answers[i]) / total)} %</span></div>`).join('')}</div>`
+      : '<p class="hint">Noch keine Antworten. Die Statistik füllt sich, sobald du lernst.</p>'}
+    <p class="hint">Gezählt wird ab dem ${log.length ? new Date(log[0].t).toLocaleDateString('de-DE') : 'ersten Lernen'} auf diesem Gerät.</p>`;
+  $('title').textContent = 'Statistik';
+  $('subtitle').textContent = '';
+  show('view-stats');
 }
 
 // ---------- Über diese App ----------
@@ -404,6 +512,7 @@ function bind() {
     const action = e.target.dataset.action;
     if (action === 'assistant') karla(true);
     if (action === 'update') await refresh(true);
+    if (action === 'stats') renderStats();
     if (action === 'about') dialog('Über diese App', aboutHtml());
   });
   $('karla-next').addEventListener('click', () => { if (tip === TIPS.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
