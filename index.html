@@ -34,6 +34,7 @@
   <div id="menu" class="menu" hidden>
     <button data-action="assistant">Lern-Assistent</button>
     <button data-action="stats">Statistik</button>
+    <button data-action="report">Fehler melden</button>
     <button data-action="update">Nach neuen Karten suchen</button>
     <button data-action="about">Über diese App</button>
   </div>
@@ -50,7 +51,11 @@
   </main>
 
   <main id="view-study" class="view" hidden>
-    <div class="counts-bar"><span class="c-new" id="s-new">0</span><span class="c-learn" id="s-learn">0</span><span class="c-review" id="s-review">0</span></div>
+    <div class="counts-bar"><span class="c-new" id="s-new">0</span><span class="c-learn" id="s-learn">0</span><span class="c-review" id="s-review">0</span>
+      <button class="report-card" id="btn-report-card" aria-label="Fehler mit dieser Karte melden">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 21V4h9l.4 2H20v10h-6.6l-.4-2H7v7z" fill="currentColor"/></svg>Fehler melden
+      </button>
+    </div>
     <div id="card-scroll" class="card-scroll"><div id="card" class="card"></div></div>
     <div class="answer-area">
       <button id="btn-show" class="btn-show">Antwort zeigen</button>
@@ -79,6 +84,23 @@
       <div id="dialog-text"></div>
       <button class="btn-primary" id="dialog-close">OK</button>
     </div>
+  </div>
+
+  <div id="report" class="dialog" hidden>
+    <form class="dialog-box report-box" id="report-form" novalidate>
+      <h2 id="report-title">Fehler melden</h2>
+      <div id="report-card-info" class="report-card-info" hidden></div>
+      <label for="report-kind">Art des Fehlers</label>
+      <select id="report-kind"></select>
+      <label for="report-text">Was ist falsch? <span class="req">*</span></label>
+      <textarea id="report-text" rows="4" placeholder="z. B. Der Grenzwert ist seit 2021 ein anderer: …"></textarea>
+      <p class="field-error" id="report-error" hidden>Bitte kurz beschreiben, was falsch ist.</p>
+      <p class="hint" id="report-hint"></p>
+      <div class="report-actions">
+        <button type="button" class="btn-secondary" id="report-cancel">Abbrechen</button>
+        <button type="submit" class="btn-primary" id="report-send">Meldung senden</button>
+      </div>
+    </form>
   </div>
 
   <div id="toast" class="toast" hidden></div>

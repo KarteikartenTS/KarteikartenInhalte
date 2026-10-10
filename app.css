@@ -166,6 +166,26 @@ button { font: inherit; cursor: pointer; }
 .dialog-box a { color: var(--blue); }
 .dialog-box .btn-primary { margin-top: 12px; float: right; }
 
+/* Fehler melden */
+.counts-bar { align-items: center; }
+.report-card {
+  margin-left: auto; display: flex; align-items: center; gap: 4px; background: none; border: 0;
+  color: var(--blue-dark); font-size: 13px; padding: 4px 0; min-height: 32px;
+}
+.report-box label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+.report-box select, .report-box textarea {
+  width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid #C4C7CC; border-radius: 8px; background: #fff;
+}
+.report-box textarea { resize: vertical; min-height: 96px; }
+.report-card-info { background: #F3F6FA; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: var(--muted); }
+.report-card-info b { color: var(--text); }
+.req { color: var(--again); }
+.field-error { color: var(--again); font-size: 13px; margin: 4px 0 0; }
+.report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.report-actions .btn-primary { float: none; margin: 0; }
+.report-pre { white-space: pre-wrap; font-size: 12px; background: #F3F6FA; padding: 8px; border-radius: 8px; user-select: all; }
+.btn-secondary { background: none; border: 1px solid #C4C7CC; border-radius: 22px; padding: 12px 20px; font-size: 16px; color: var(--text); }
+
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--bar-bottom) + 24px); z-index: 40;
   background: #323232; color: #fff; padding: 12px 18px; border-radius: 8px; max-width: calc(100% - 32px);

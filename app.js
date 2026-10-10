@@ -21,6 +21,11 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
+const APP_VERSION = 'Web 0.2.0';
+// Empfänger für Fehlermeldungen. Leer = Meldung wird zum Kopieren angeboten statt per Mail geöffnet.
+const REPORT_EMAIL = 'louis.thomee@partner.tuvsud.com';
+const REPORT_KINDS = ['Inhalt falsch oder veraltet', 'Antwort unvollständig', 'Tipp- oder Rechtschreibfehler', 'Bild fehlt oder ist falsch', 'App funktioniert nicht richtig', 'Sonstiges'];
+
 // Lernmodus "Zahlen & Daten": alle Karten eines Moduls mit dem Tag aus der Content-Pipeline
 const NUM_TAG = 'Zahlen';
 const NUM_NAME = 'Zahlen & Daten';
@@ -420,6 +425,72 @@ function renderStats() {
   show('view-stats');
 }
 
+// ---------- Fehler melden ----------
+const plainText = (html) => {
+  const d = document.createElement('div');
+  d.innerHTML = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+  return d.textContent.replace(/\s+/g, ' ').trim();
+};
+let reportCard = null;
+
+function openReport(card) {
+  reportCard = card;
+  $('report-title').textContent = card ? 'Fehler mit dieser Karte melden' : 'Fehler melden';
+  const info = $('report-card-info');
+  info.hidden = !card;
+  if (card) {
+    const q = plainText(card.q);
+    info.innerHTML = `<b>${esc(card.deck.replace(/::/g, ' › '))}</b><br>${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}`;
+  }
+  $('report-kind').innerHTML = REPORT_KINDS.filter((k) => card || !k.startsWith('Bild'))
+    .map((k) => `<option>${esc(k)}</option>`).join('');
+  if (!card) $('report-kind').value = 'App funktioniert nicht richtig';
+  $('report-text').value = '';
+  $('report-error').hidden = true;
+  $('report-hint').textContent = REPORT_EMAIL
+    ? 'Dein Mailprogramm öffnet sich mit einer vorbereiteten Nachricht. Du musst nur noch auf Senden tippen.'
+    : 'Die Meldung wird in die Zwischenablage kopiert. Füge sie in eine Mail an die Akademie ein.';
+  $('report').hidden = false;
+  $('report-text').focus();
+}
+
+function reportBody(kind, text) {
+  const lines = [`Art: ${kind}`, '', 'Beschreibung:', text, ''];
+  if (reportCard) {
+    lines.push('Karte:', `  Kapitel: ${reportCard.deck.replace(/::/g, ' › ')}`, `  Frage: ${plainText(reportCard.q)}`, `  Karten-ID: ${reportCard.id}`, '');
+  }
+  const m = state.modules.map((x) => `${x.title} (Stand ${x.version})`).join(', ');
+  lines.push('Technische Angaben:', `  App: ${APP_VERSION}`, `  Inhalte: ${m}`, `  Gerät: ${navigator.userAgent}`, `  Zeit: ${new Date().toLocaleString('de-DE')}`);
+  return lines.join('\n');
+}
+
+async function sendReport(e) {
+  e.preventDefault();
+  const text = $('report-text').value.trim();
+  if (!text) {
+    $('report-error').hidden = false;
+    $('report-text').focus();
+    return;
+  }
+  const kind = $('report-kind').value;
+  const subject = reportCard
+    ? `Karteikarten-App: Fehler in Karte (${deckLabel(reportCard.deck)})`
+    : `Karteikarten-App: ${kind}`;
+  const body = reportBody(kind, text);
+  if (REPORT_EMAIL) {
+    location.href = `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    toast('Danke! Bitte die Mail noch absenden.');
+  } else {
+    try {
+      await navigator.clipboard.writeText(`${subject}\n\n${body}`);
+      toast('Meldung kopiert. Bitte in eine Mail an die Akademie einfügen.');
+    } catch {
+      dialog('Meldung zum Kopieren', `<pre class="report-pre">${esc(`${subject}\n\n${body}`)}</pre>`);
+    }
+  }
+  $('report').hidden = true;
+}
+
 // ---------- Über diese App ----------
 const LINK = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
 function aboutHtml() {
@@ -443,6 +514,12 @@ function aboutHtml() {
       <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid/releases/tag/v0.1.0-demo', 'Android-App herunterladen')}</li>
       <li>${LINK('https://github.com/KarteikartenTS/KarteikartenInhalte', 'Web-App und Karteikarten auf GitHub')}</li>
       <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid', 'Quellcode der Android-App auf GitHub')} (GPL-3.0, basiert auf AnkiDroid)</li>
+    </ul>
+
+    <h3>Fehler gefunden?</h3>
+    <ul>
+      <li>Fehler in einer Karte: beim Lernen oben rechts auf „Fehler melden“ tippen. Die Karte wird automatisch mitgeschickt.</li>
+      <li>Fehler in der App: <a href="#" id="about-report">Fehler melden</a></li>
     </ul>
 
     <h3>Hinweise</h3>
@@ -499,6 +576,10 @@ function wiggle() {
 // ---------- Start ----------
 function bind() {
   $('btn-show').addEventListener('click', showAnswer);
+  $('btn-report-card').addEventListener('click', () => openReport(state.current));
+  $('report-form').addEventListener('submit', sendReport);
+  $('report-cancel').addEventListener('click', () => { $('report').hidden = true; });
+  $('report-text').addEventListener('input', () => { $('report-error').hidden = true; });
   $('ease-buttons').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-ease]');
     if (b) answer(Number(b.dataset.ease));
@@ -513,14 +594,19 @@ function bind() {
     if (action === 'assistant') karla(true);
     if (action === 'update') await refresh(true);
     if (action === 'stats') renderStats();
-    if (action === 'about') dialog('Über diese App', aboutHtml());
+    if (action === 'report') openReport(null);
+    if (action === 'about') {
+      dialog('Über diese App', aboutHtml());
+      $('about-report').addEventListener('click', (ev) => { ev.preventDefault(); $('dialog').hidden = true; openReport(null); });
+    }
   });
   $('karla-next').addEventListener('click', () => { if (tip === TIPS.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
   $('karla-back').addEventListener('click', () => { tip = Math.max(0, tip - 1); renderTip(); wiggle(); });
   $('karla-close').addEventListener('click', () => karla(false));
   $('karla-figure').addEventListener('click', wiggle);
   document.addEventListener('keydown', (e) => {
-    if ($('view-study').hidden) return;
+    // Tastenkürzel nur beim Lernen, nicht beim Tippen in Formularen
+    if ($('view-study').hidden || !$('report').hidden || !$('dialog').hidden) return;
     if (!$('btn-show').hidden && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); showAnswer(); }
     else if (!$('ease-buttons').hidden && ['1', '2', '3', '4'].includes(e.key)) answer(Number(e.key));
   });
