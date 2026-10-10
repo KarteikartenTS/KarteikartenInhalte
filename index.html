@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TÜV SÜD Akademie</title>
+  <meta name="description" content="Karteikarten-App der TÜV SÜD Akademie (Demo, Web-Version für iPhone und iPad)">
+  <meta name="theme-color" content="#005CA9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="TÜV SÜD Akademie">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="btn-back" aria-label="Zurück" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z" fill="currentColor"/></svg>
+    </button>
+    <div class="titles">
+      <h1 id="title">TÜV SÜD Akademie</h1>
+      <div id="subtitle" class="subtitle"></div>
+    </div>
+    <!-- Platz für das TÜV-SÜD-Logo, sobald die Datei freigegeben ist -->
+    <button class="icon-btn" id="btn-menu" aria-label="Menü">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>
+    </button>
+  </header>
+
+  <div id="menu" class="menu" hidden>
+    <button data-action="assistant">Lern-Assistent</button>
+    <button data-action="update">Nach neuen Karten suchen</button>
+    <button data-action="about">Über diese App</button>
+  </div>
+
+  <main id="view-decks" class="view">
+    <ul id="deck-list" class="deck-list"></ul>
+    <div id="empty" class="empty" hidden>
+      <img src="icons/icon-192.png" alt="" width="96" height="96">
+      <h2>Noch keine Karteikarten</h2>
+      <p>Deine Module werden automatisch geladen, sobald du mit dem Internet verbunden bist.</p>
+    </div>
+    <p id="today" class="today"></p>
+  </main>
+
+  <main id="view-study" class="view" hidden>
+    <div class="counts-bar"><span class="c-new" id="s-new">0</span><span class="c-learn" id="s-learn">0</span><span class="c-review" id="s-review">0</span></div>
+    <div id="card-scroll" class="card-scroll"><div id="card" class="card"></div></div>
+    <div class="answer-area">
+      <button id="btn-show" class="btn-show">Antwort zeigen</button>
+      <div id="ease-buttons" class="ease-buttons" hidden>
+        <button data-ease="1" class="ease again"><small></small>Nochmal</button>
+        <button data-ease="2" class="ease hard"><small></small>Schwer</button>
+        <button data-ease="3" class="ease good"><small></small>Gut</button>
+        <button data-ease="4" class="ease easy"><small></small>Einfach</button>
+      </div>
+    </div>
+  </main>
+
+  <main id="view-done" class="view done" hidden>
+    <h2>Geschafft für heute!</h2>
+    <p id="done-text">In diesem Stapel ist gerade nichts fällig.</p>
+    <button class="btn-primary" id="btn-done">Zur Übersicht</button>
+  </main>
+
+  <div id="dialog" class="dialog" hidden>
+    <div class="dialog-box">
+      <h2 id="dialog-title"></h2>
+      <div id="dialog-text"></div>
+      <button class="btn-primary" id="dialog-close">OK</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- Lern-Assistentin Karla (Win98-Stil, eigene Figur) -->
+  <div id="karla" class="karla" hidden>
+    <div class="bubble" role="dialog" aria-live="polite">
+      <strong id="karla-title"></strong>
+      <p id="karla-text"></p>
+      <div class="bubble-row">
+        <span id="karla-progress" class="progress"></span>
+        <button class="w98" id="karla-back">Zurück</button>
+        <button class="w98" id="karla-next">Weiter</button>
+      </div>
+      <button class="link" id="karla-close">Tipps schließen</button>
+    </div>
+    <svg class="tail" viewBox="0 0 24 16" width="24" height="16" aria-hidden="true"><path d="M2 0 6 15 20 0" fill="#FFFFE1" stroke="#000"/><path d="M2.6-1H20l-1 1.6H3z" fill="#FFFFE1"/></svg>
+    <svg class="figure" id="karla-figure" viewBox="0 0 96 112" width="84" height="98" role="img" aria-label="Lern-Assistentin Karla">
+      <ellipse cx="48" cy="106" rx="30" ry="5" fill="#0003"/>
+      <path d="M12 62Q2 52 6 40" stroke="#003F75" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <path d="M84 62q10 8 6 18" stroke="#003F75" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <rect x="16" y="14" width="68" height="84" rx="6" fill="#B9D3EC" stroke="#003F75" stroke-width="2"/>
+      <rect x="12" y="8" width="68" height="88" rx="6" fill="#fff" stroke="#003F75" stroke-width="2.5"/>
+      <path d="M18 8h56a6 6 0 0 1 6 6v6H12v-6a6 6 0 0 1 6-6z" fill="#005CA9"/>
+      <path d="M26 32q7-6 14-1M52 31q7-5 14 1" stroke="#222" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <ellipse cx="33" cy="44" rx="9" ry="10" fill="#fff" stroke="#222" stroke-width="2"/>
+      <ellipse cx="59" cy="44" rx="9" ry="10" fill="#fff" stroke="#222" stroke-width="2"/>
+      <circle cx="35" cy="46" r="4" fill="#222"/><circle cx="61" cy="46" r="4" fill="#222"/>
+      <circle cx="35.5" cy="44.5" r="1.5" fill="#fff"/><circle cx="61.5" cy="44.5" r="1.5" fill="#fff"/>
+      <path d="M34 66q12 10 24 0" stroke="#222" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M24 82h44v3H24zM24 88h30v3H24z" fill="#B9D3EC"/>
+    </svg>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

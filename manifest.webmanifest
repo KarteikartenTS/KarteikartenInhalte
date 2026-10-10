@@ -1,0 +1,16 @@
+{
+  "name": "TÜV SÜD Akademie – Karteikarten",
+  "short_name": "TÜV SÜD Akademie",
+  "description": "Karteikarten der TÜV SÜD Akademie (Demo)",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#005CA9",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "_comment": "Module für die Web-App. Je Modul erzeugt tools/content-pipeline/export_web.py den Ordner content/<id>/.",
+  "modules": [
+    { "id": "pti-1", "title": "PTI 1" }
+  ]
+}
