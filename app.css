@@ -212,6 +212,9 @@ button { font: inherit; cursor: pointer; }
 .sync-code { text-align: center; font: 600 20px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 1px; margin: 6px 0 10px; }
 .sync-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .sync-wide { float: none !important; width: 100%; margin: 8px 0 4px !important; }
+.w98-action { display: block; width: 100%; margin-top: 10px; height: 40px; font-weight: 700; color: #003F75; }
+.steps { padding-left: 22px; margin: 6px 0 4px; }
+.steps li { margin: 8px 0; }
 .btn-secondary { background: none; border: 1px solid #C4C7CC; border-radius: 22px; padding: 12px 20px; font-size: 16px; color: var(--text); }
 
 .toast {

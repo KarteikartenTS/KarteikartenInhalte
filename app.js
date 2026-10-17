@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.0';
+const APP_VERSION = 'Web 0.7.1';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -644,6 +644,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.1', date: '17.10.2026', items: [
+    'Zum Home-Bildschirm hinzufügen: direkt aus Karlas Tour oder über das Menü ⋮ – auf dem iPhone mit Anleitung und Code, um den Lernstand mitzunehmen.',
+  ] },
   { version: 'Web 0.7.0', date: '17.10.2026', items: [
     'Geräte verbinden: Lernstand auf Handy und PC abgleichen – QR-Code scannen, fertig. Ende-zu-Ende-verschlüsselt.',
   ] },
@@ -689,6 +692,48 @@ function showNews(force = false) {
     <ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')
     + '<p class="hint">Fehlt dir etwas? Menü → „Feedback geben“.</p>');
   return true;
+}
+
+// ---------- Zum Home-Bildschirm hinzufügen ----------
+let installPrompt = null;   // Chrome/Edge/Android: gemerktes beforeinstallprompt-Ereignis
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; updateInstallMenu(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; updateInstallMenu(); toast('Installiert – du findest die App jetzt auf deinem Home-Bildschirm.'); });
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function updateInstallMenu() { $('menu-install').hidden = isInstalled(); }
+
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3 8 7h3v8h2V7h3l-4-4zM6 10v10h12V10h-3V8h5v14H4V8h5v2H6z" fill="#007AFF"/></svg>';
+
+async function installApp() {
+  if (isInstalled()) { toast('Die App ist bereits auf deinem Home-Bildschirm.'); return; }
+  if (installPrompt) {
+    // Chrome/Edge/Android: System-Dialog
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    installPrompt = null;
+    if (outcome !== 'accepted') toast('Kein Problem – du findest das jederzeit im Menü ⋮.');
+    return;
+  }
+  if (isIOS()) {
+    const code = load(KEY_SYNC, null);
+    const learned = Object.keys(state.progress).length;
+    dialog('Zum Home-Bildschirm', `
+      <ol class="steps">
+        <li>Tippe in Safari unten auf <b>Teilen</b> ${SHARE_ICON}</li>
+        <li>Wähle <b>„Zum Home-Bildschirm“</b> (ggf. nach unten scrollen).</li>
+        <li>Tippe oben rechts auf <b>„Hinzufügen“</b>.</li>
+      </ol>
+      ${learned ? `<h3>Deinen Lernstand mitnehmen</h3>
+        <p class="hint">Die Home-Bildschirm-App startet auf dem iPhone mit leerem Speicher. Öffne dort ⋮ → „Geräte verbinden“ und gib diesen Code ein:</p>
+        ${code ? `<p class="sync-code">${esc(code)}</p>` : '<button class="btn-primary sync-wide" id="install-sync">Code für meinen Lernstand erzeugen</button>'}` : ''}`);
+    if ($('install-sync')) $('install-sync').onclick = async () => { await connectSync(newSyncCode(), { create: true }); installApp(); };
+    return;
+  }
+  dialog('Zum Home-Bildschirm', `
+    <p>Dein Browser bietet das über sein eigenes Menü an:</p>
+    <ul class="steps"><li><b>Android (Chrome):</b> Menü ⋮ → „App installieren“ bzw. „Zum Startbildschirm hinzufügen“</li>
+      <li><b>Desktop (Chrome/Edge):</b> Installieren-Symbol rechts in der Adressleiste</li>
+      <li><b>Firefox/Android:</b> Menü ⋮ → „Installieren“</li></ul>`);
 }
 
 // ---------- Geräte-Sync (QR-Code, Ende-zu-Ende-verschlüsselt) ----------
@@ -1019,7 +1064,8 @@ const TIPS = [
   ['So lernst du', 'Tippe auf ein Modul oder Kapitel, um zu lernen. Du siehst zuerst die Frage. Überlege dir die Antwort und decke sie dann auf.'],
   ['Ehrlich bewerten', 'Nach dem Aufdecken bewertest du dich: „Nochmal“, „Schwer“, „Gut“ oder „Einfach“. Danach plant die App, wann die Karte wiederkommt.'],
   ['Die Zahlen rechts', 'Blau sind neue Karten, Rot Karten in der Lernphase, Grün fällige Wiederholungen. Jeden Tag ein bisschen bringt am meisten.'],
-  ['Wie eine echte App', 'Tippe in Safari unten auf „Teilen“ und dann auf „Zum Home-Bildschirm“. Dann startet die App mit eigenem Symbol und funktioniert auch offline.'],
+  ['Wie eine echte App', 'Leg dir die App auf den Home-Bildschirm: Dann startet sie mit eigenem Symbol, im Vollbild und funktioniert auch offline.',
+    { label: 'Zum Home-Bildschirm', run: () => installApp(), hideIf: () => isInstalled() }],
   ['Kleiner Tipp', 'Dein Lernstand wird auf diesem Gerät gespeichert. Du findest mich jederzeit über ⋮ und „Lern-Assistent“. Viel Erfolg!'],
 ];
 let tip = 0;
@@ -1056,6 +1102,10 @@ function karlaAsk(title, text, yes, no, onAnswer) {
 function renderTip() {
   $('karla-title').textContent = tips[tip][0];
   $('karla-text').textContent = tips[tip][1];
+  // Optionaler Aktionsknopf in der Sprechblase (z. B. „Zum Home-Bildschirm“)
+  const action = tips[tip][2];
+  $('karla-action').hidden = !action || (action.hideIf && action.hideIf());
+  if (action) { $('karla-action').textContent = action.label; $('karla-action').onclick = action.run; }
   $('karla-progress').textContent = tips.length > 1 ? `${tip + 1}/${tips.length}` : '';
   $('karla-back').classList.toggle('invisible', tip === 0);
   $('karla-next').textContent = tip === tips.length - 1 ? (tips === TIPS ? 'Fertig' : 'Danke!') : 'Weiter';
@@ -1135,6 +1185,7 @@ function bind() {
     if (action === 'stats') renderStats();
     if (action === 'feedback') openReport(null, 'fehler');
     if (action === 'sync') openSync();
+    if (action === 'install') installApp();
     if (action === 'mine') openMine();
     if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
@@ -1183,6 +1234,7 @@ async function refresh(manual) {
 
 async function main() {
   bind();
+  updateInstallMenu();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
