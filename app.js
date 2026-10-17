@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.1';
+const APP_VERSION = 'Web 0.7.2';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -644,6 +644,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.2', date: '17.10.2026', items: [
+    'Sync-Knopf oben in der Kopfzeile: zeigt, ob deine Geräte verbunden sind, und öffnet „Geräte verbinden“.',
+  ] },
   { version: 'Web 0.7.1', date: '17.10.2026', items: [
     'Zum Home-Bildschirm hinzufügen: direkt aus Karlas Tour oder über das Menü ⋮ – auf dem iPhone mit Anleitung und Code, um den Lernstand mitzunehmen.',
   ] },
@@ -785,10 +788,21 @@ function mergeSync(a, b) {
 const localSyncState = () => ({ progress: state.progress, revlog: state.revlog, codes: load(KEY_CODES, []), mine: load(KEY_MINE, []) });
 
 /** Abgleich mit dem Server: holen, zusammenführen, lokal übernehmen, verschlüsselt zurückschreiben. */
+/** Sync-Knopf in der Kopfzeile: verbunden (grüner Punkt), nicht verbunden (gedimmt), dreht sich beim Abgleich. */
+function updateSyncButton(busy = false) {
+  const b = $('btn-sync');
+  const on = !!load(KEY_SYNC, null);
+  b.classList.toggle('on', on);
+  b.classList.toggle('busy', busy);
+  const at = load(KEY_SYNC_AT, 0);
+  b.title = on ? `Geräte verbunden${at ? ` – zuletzt abgeglichen ${new Date(at).toLocaleString('de-DE')}` : ''}` : 'Geräte verbinden (Sync)';
+}
+
 function syncNow() {
   const code = load(KEY_SYNC, null);
   if (!code) return Promise.resolve(false);
   if (syncBusy) return syncBusy;
+  updateSyncButton(true);
   syncBusy = (async () => {
     try {
       const { id, key } = await syncKeys(code);
@@ -815,6 +829,7 @@ function syncNow() {
       return false;
     } finally {
       syncBusy = null;
+      updateSyncButton(false);
     }
   })();
   return syncBusy;
@@ -878,6 +893,7 @@ async function openSync() {
   $('sync-off').onclick = () => {
     if (!confirm('Dieses Gerät vom Sync trennen? Der Lernstand bleibt auf dem Gerät erhalten.')) return;
     try { localStorage.removeItem(KEY_SYNC); } catch {}
+    updateSyncButton();
     $('dialog').hidden = true;
     toast('Getrennt.');
   };
@@ -1235,6 +1251,8 @@ async function refresh(manual) {
 async function main() {
   bind();
   updateInstallMenu();
+  updateSyncButton();
+  $('btn-sync').addEventListener('click', (e) => { e.stopPropagation(); if (load(KEY_SYNC, null)) syncNow(); openSync(); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

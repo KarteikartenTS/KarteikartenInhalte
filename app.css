@@ -41,6 +41,13 @@ button { font: inherit; cursor: pointer; }
 .topbar h1 { margin: 0; font-size: 21px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .subtitle { font-size: 14px; opacity: .9; }
 .subtitle:empty { display: none; }
+.sync-btn { position: relative; opacity: .6; }
+.sync-btn.on { opacity: 1; }
+.sync-btn .sync-dot { display: none; position: absolute; top: 9px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: #4CAF50; border: 2px solid var(--blue); }
+.sync-btn.on .sync-dot { display: block; }
+.sync-btn.busy svg { animation: sync-spin 1s linear infinite; }
+@keyframes sync-spin { to { transform: rotate(-360deg); } }
+@media (prefers-reduced-motion: reduce) { .sync-btn.busy svg { animation: none; } }
 .top-logo { width: 36px; height: 36px; flex-shrink: 0; filter: brightness(0) invert(1); opacity: .95; }
 .icon-btn {
   background: none; border: 0; color: inherit; width: 44px; height: 44px;
