@@ -242,6 +242,24 @@ button { font: inherit; cursor: pointer; }
 .figure { animation: karla-float .9s ease-in-out infinite alternate; transform-origin: 50% 90%; }
 @keyframes karla-float { to { transform: translateY(-6px); } }
 .figure.wiggle { animation: karla-wiggle .5s ease-in-out; }
+/* Freudensprung beim Freischalten */
+.figure.jump { animation: karla-jump 1.2s cubic-bezier(.3, .7, .4, 1); }
+@keyframes karla-jump {
+  0% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-46px) rotate(-8deg); }
+  40% { transform: translateY(0) rotate(0); }
+  55% { transform: translateY(-24px) rotate(6deg); }
+  70%, 100% { transform: translateY(0) rotate(0); }
+}
+.confetti {
+  position: absolute; bottom: 70px; z-index: 3; width: 8px; height: 11px; border-radius: 2px; pointer-events: none;
+  animation: confetti 1.4s ease-out both;
+}
+@keyframes confetti {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--x), -220px) rotate(var(--r)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .figure.jump, .confetti { animation: none; } .confetti { display: none; } }
 @keyframes karla-wiggle { 20% { transform: rotate(-10deg); } 50% { transform: rotate(8deg); } 80% { transform: rotate(-4deg); } }
 
 @media (prefers-reduced-motion: reduce) {

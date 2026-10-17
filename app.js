@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.5.0';
+const APP_VERSION = 'Web 0.5.1';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -570,7 +570,8 @@ function openModules() {
       save(KEY_HIDDEN, load(KEY_HIDDEN, []).filter((id) => id !== r.module.id));
       $('dialog').hidden = true;
       await refresh(false);
-      toast(`„${r.module.title}“ ist freigeschaltet.`);
+      // Karla freut sich mit (statt kurzer Hinweis unten)
+      karlaUnlocked(r.module.id, r.module.title);
     } catch (err) {
       $('unlock-error').textContent = err.status === 404 ? 'Dieser Code ist ungültig oder abgelaufen.' : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
       $('unlock-error').hidden = false;
@@ -627,6 +628,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.5.1', date: '17.10.2026', items: [
+    'Karla freut sich mit: Beim Freischalten eines Moduls zeigt sie dir, was neu ist und wo du anfängst.',
+  ] },
   { version: 'Web 0.5.0', date: '17.10.2026', items: [
     'Idee vorschlagen: Wünsche direkt an die Akademie senden (Menü).',
     'Meine Rückmeldungen: Status und Antwort der Akademie zu deinen Meldungen und Ideen.',
@@ -808,26 +812,65 @@ const TIPS = [
   ['Kleiner Tipp', 'Dein Lernstand wird auf diesem Gerät gespeichert. Du findest mich jederzeit über ⋮ und „Lern-Assistent“. Viel Erfolg!'],
 ];
 let tip = 0;
+let tips = TIPS;   // aktuelle Sprechblasen: die Tour oder ein Ereignis (z. B. Modul freigeschaltet)
 
-function karla(open) {
+/** Karla zeigen (Tour oder Ereignis-Sprechblasen) bzw. ausblenden. mood "celebrate" = Freudensprung. */
+function karla(open, list = TIPS, mood = '') {
   const k = $('karla');
   if (open) {
+    tips = list;
     tip = 0;
     renderTip();
     k.classList.remove('out');
     k.hidden = false;
+    if (mood) celebrate();
   } else {
-    save(KEY_TOUR, true);
+    if (tips === TIPS) save(KEY_TOUR, true);
     k.classList.add('out');
     setTimeout(() => { k.hidden = true; }, 260);
   }
 }
 function renderTip() {
-  $('karla-title').textContent = TIPS[tip][0];
-  $('karla-text').textContent = TIPS[tip][1];
-  $('karla-progress').textContent = `${tip + 1}/${TIPS.length}`;
+  $('karla-title').textContent = tips[tip][0];
+  $('karla-text').textContent = tips[tip][1];
+  $('karla-progress').textContent = tips.length > 1 ? `${tip + 1}/${tips.length}` : '';
   $('karla-back').classList.toggle('invisible', tip === 0);
-  $('karla-next').textContent = tip === TIPS.length - 1 ? 'Fertig' : 'Weiter';
+  $('karla-next').textContent = tip === tips.length - 1 ? (tips === TIPS ? 'Fertig' : 'Danke!') : 'Weiter';
+  $('karla-close').textContent = tips === TIPS ? 'Tipps schließen' : 'Schließen';
+}
+/** Freudensprung mit ein paar Konfetti-Karten. */
+function celebrate() {
+  const f = $('karla-figure');
+  f.classList.remove('jump');
+  void f.getBoundingClientRect();
+  f.classList.add('jump');
+  setTimeout(() => f.classList.remove('jump'), 1300);
+  const box = $('karla');
+  for (let i = 0; i < 14; i++) {
+    const c = document.createElement('i');
+    c.className = 'confetti';
+    c.style.setProperty('--x', `${Math.round(Math.random() * 220 - 60)}px`);
+    c.style.setProperty('--r', `${Math.round(Math.random() * 540 - 270)}deg`);
+    c.style.left = `${40 + Math.random() * 20}px`;
+    c.style.animationDelay = `${Math.random() * 0.25}s`;
+    c.style.background = ['#005CA9', '#7FB2E5', '#FFC107', '#4CAF50', '#E53935'][i % 5];
+    box.appendChild(c);
+    setTimeout(() => c.remove(), 1700);
+  }
+}
+
+/** Ereignis: Modul per Code freigeschaltet. */
+function karlaUnlocked(moduleId, title) {
+  const cards = state.cards.filter((c) => c.module === moduleId);
+  const chapters = new Set(cards.map((c) => c.deck)).size;
+  const numbers = cards.filter((c) => (c.tags || []).includes(NUM_TAG)).length;
+  const list = [[
+    'Freigeschaltet – super!',
+    `„${title}“ ist jetzt in deiner Übersicht: ${cards.length} Karten${chapters > 1 ? ` in ${chapters} Kapiteln` : ''}. Tippe auf das Modul oder ein Kapitel und leg los.`,
+  ]];
+  if (numbers) list.push(['Mein Tipp für dich', `${numbers} Karten mit Grenzwerten, Fristen und Stichtagen übst du gezielt unter „123 Zahlen & Daten“ direkt unter dem Modul.`]);
+  list.push(['Gut zu wissen', 'Über ⋮ → „Module verwalten“ kannst du das Modul jederzeit ausblenden und wieder hinzufügen. Dein Lernstand bleibt erhalten. Viel Erfolg!']);
+  karla(true, list, 'celebrate');
 }
 function wiggle() {
   const f = $('karla-figure');
@@ -868,7 +911,7 @@ function bind() {
       $('about-report').addEventListener('click', (ev) => { ev.preventDefault(); $('dialog').hidden = true; openReport(null); });
     }
   });
-  $('karla-next').addEventListener('click', () => { if (tip === TIPS.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
+  $('karla-next').addEventListener('click', () => { if (tip === tips.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
   $('karla-back').addEventListener('click', () => { tip = Math.max(0, tip - 1); renderTip(); wiggle(); });
   $('karla-close').addEventListener('click', () => karla(false));
   $('karla-figure').addEventListener('click', wiggle);
