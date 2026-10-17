@@ -192,6 +192,17 @@ button { font: inherit; cursor: pointer; }
 .unlock-row .btn-primary { float: none; margin: 0; }
 .mod-list { list-style: none; padding: 0; margin: 0; }
 .mod-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #E53935; vertical-align: 2px; margin-left: 4px; }
+.icon-btn { position: relative; }
+.menu-dot { position: absolute; top: 9px; right: 9px; margin: 0; border: 2px solid var(--blue); width: 11px; height: 11px; }
+.mine-row { padding: 10px 0; border-bottom: 1px solid var(--line); display: block; }
+.mine-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.status-pill { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #EEF1F4; color: var(--muted); white-space: nowrap; }
+.status-pill.s-in-arbeit { background: #FFF4E5; color: #B26A00; }
+.status-pill.s-erledigt { background: #E8F5E9; color: #2E7D32; }
+.status-pill.s-abgelehnt { background: #F3F4F6; color: #5F6368; }
+.mine-reply { margin-top: 6px; background: #F3F6FA; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.mine-reply.new { background: #E6F0FA; border-left: 3px solid var(--blue); }
 .mod-row .btn-secondary { padding: 8px 14px; font-size: 14px; }
 .btn-secondary { background: none; border: 1px solid #C4C7CC; border-radius: 22px; padding: 12px 20px; font-size: 16px; color: var(--text); }
 

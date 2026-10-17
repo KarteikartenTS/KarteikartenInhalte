@@ -21,12 +21,16 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.4.0';
+const APP_VERSION = 'Web 0.5.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
 const KEY_DEVICE = 'tuev.device.v1';
 const KEY_STATS_SENT = 'tuev.stats.sent.v1';
+const KEY_MINE = 'tuev.mine.v1';            // eigene Einsendungen: [{ token, type, kind, text, created }]
+const KEY_MINE_SEEN = 'tuev.mine.seen.v1';  // gelesene Antworten: { token: replied }
+const KEY_SEEN_VERSION = 'tuev.seenversion.v1';
+const WISH_KINDS = ['Neue Funktion', 'Neue Inhalte / weiteres Modul', 'Verbesserung', 'Sonstiges'];
 const KEY_CODES = 'tuev.codes.v1';          // freigeschaltete Module: [{ code, module, title }]
 const KEY_HIDDEN = 'tuev.hidden.v1';        // vom Lernenden entfernte Module (Lernstand bleibt)
 const KEY_SERVER_CACHE = 'tuev.servercache.v1'; // Server-Module für den Offline-Betrieb
@@ -586,6 +590,75 @@ function openModules() {
   }));
 }
 
+// ---------- Meine Rückmeldungen (Feedback-Schleife) ----------
+const STATUS_TEXT = { offen: 'eingegangen', 'in-arbeit': 'in Arbeit', erledigt: 'erledigt', abgelehnt: 'nicht umgesetzt' };
+let mineCache = [];
+async function checkMine() {
+  const mine = load(KEY_MINE, []);
+  if (!mine.length) return;
+  try {
+    mineCache = (await postJson('/api/report-status', { tokens: mine.map((m) => m.token) })).reports;
+  } catch (e) { console.warn('Rückmeldungen nicht abrufbar', e); }
+  const seen = load(KEY_MINE_SEEN, {});
+  const unread = mineCache.some((r) => r.replied && seen[r.token] !== r.replied);
+  $('menu-dot').hidden = $('mine-dot').hidden = !unread;
+}
+async function openMine() {
+  await checkMine();
+  const mine = load(KEY_MINE, []).slice().reverse();
+  const seen = load(KEY_MINE_SEEN, {});
+  const rows = mine.map((m) => {
+    const r = mineCache.find((x) => x.token === m.token) || {};
+    const isNew = r.replied && seen[m.token] !== r.replied;
+    return `<li class="mine-row">
+      <div class="mine-head"><b>${m.type === 'wunsch' ? 'Idee' : 'Fehler'}: ${esc(m.kind)}</b><span class="status-pill s-${esc(r.status || 'offen')}">${esc(STATUS_TEXT[r.status] || 'gesendet')}</span></div>
+      <small class="muted">${new Date(m.created).toLocaleDateString('de-DE')} · ${esc(m.text)}</small>
+      ${r.reply ? `<div class="mine-reply ${isNew ? 'new' : ''}"><b>Antwort der Akademie${isNew ? ' (neu)' : ''}:</b><br>${esc(r.reply)}</div>` : ''}
+    </li>`;
+  }).join('');
+  dialog('Meine Rückmeldungen', mine.length
+    ? `<ul class="mod-list">${rows}</ul><p class="hint">Hier siehst du, was aus deinen Meldungen und Ideen geworden ist. Gespeichert nur auf diesem Gerät.</p>`
+    : '<p>Du hast noch nichts eingesendet. Fehler meldest du beim Lernen über „Fehler melden“, Ideen über das Menü „Idee vorschlagen“.</p>');
+  // Als gelesen markieren
+  for (const r of mineCache) if (r.replied) seen[r.token] = r.replied;
+  save(KEY_MINE_SEEN, seen);
+  $('menu-dot').hidden = $('mine-dot').hidden = true;
+}
+
+// ---------- Was ist neu? ----------
+const CHANGELOG = [
+  { version: 'Web 0.5.0', date: '17.10.2026', items: [
+    'Idee vorschlagen: Wünsche direkt an die Akademie senden (Menü).',
+    'Meine Rückmeldungen: Status und Antwort der Akademie zu deinen Meldungen und Ideen.',
+    'Was ist neu? – diese Übersicht nach jedem Update.',
+  ] },
+  { version: 'Web 0.4.0', date: '17.10.2026', items: [
+    'Module freischalten per Code, z. B. „Mündliche Prüfung“ (Menü → Module verwalten).',
+    'Module ausblenden und wieder hinzufügen, der Lernstand bleibt erhalten.',
+  ] },
+  { version: 'Web 0.3.0', date: '17.10.2026', items: [
+    'Fehlermeldungen gehen direkt an die Akademie.',
+    'Anonyme Lernstatistik (freiwillig, unter Statistik einschaltbar).',
+  ] },
+  { version: 'Web 0.2.0', date: '10.10.2026', items: [
+    'Lernmodus „Zahlen & Daten“ für Grenzwerte, Fristen und Stichtage.',
+    'Statistik mit Lernverlauf, Fortschritt je Kapitel und Fälligkeiten.',
+    'Fehler zu einzelnen Karten melden.',
+  ] },
+];
+/** Nach einem Update einmal zeigen; beim allerersten Start nicht (dann erklärt Karla). */
+function showNews(force = false) {
+  const seen = load(KEY_SEEN_VERSION, null);
+  save(KEY_SEEN_VERSION, APP_VERSION);
+  // Bestehende Nutzer ohne gespeicherte Version (vor 0.5.0) sehen die neueste Änderung
+  if (!force && (seen === APP_VERSION || (!seen && !load(KEY_TOUR, false)))) return;
+  const idx = force ? CHANGELOG.length : Math.max(1, CHANGELOG.findIndex((c) => c.version === seen));
+  const entries = CHANGELOG.slice(0, idx === -1 ? CHANGELOG.length : idx);
+  dialog('Was ist neu?', entries.map((c) => `<h3>${esc(c.version.replace('Web ', 'Version '))} <small class="muted">${esc(c.date)}</small></h3>
+    <ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')
+    + '<p class="hint">Fehlt dir etwas? Menü → „Idee vorschlagen“.</p>');
+}
+
 // ---------- Fehler melden ----------
 const plainText = (html) => {
   const d = document.createElement('div');
@@ -594,18 +667,23 @@ const plainText = (html) => {
 };
 let reportCard = null;
 
-function openReport(card) {
+let reportType = 'fehler';
+function openReport(card, type = 'fehler') {
   reportCard = card;
-  $('report-title').textContent = card ? 'Fehler mit dieser Karte melden' : 'Fehler melden';
+  reportType = type;
+  const wish = type === 'wunsch';
+  $('report-title').textContent = wish ? 'Idee oder Wunsch einreichen' : card ? 'Fehler mit dieser Karte melden' : 'Fehler melden';
+  $('report-text-label').firstChild.textContent = wish ? 'Was wünschst du dir? ' : 'Was ist falsch? ';
+  $('report-text').placeholder = wish ? 'z. B. Ein Modul zu Bremsen wäre super, weil …' : 'z. B. Der Grenzwert ist seit 2021 ein anderer: …';
   const info = $('report-card-info');
   info.hidden = !card;
   if (card) {
     const q = plainText(card.q);
     info.innerHTML = `<b>${esc(card.deck.replace(/::/g, ' › '))}</b><br>${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}`;
   }
-  $('report-kind').innerHTML = REPORT_KINDS.filter((k) => card || !k.startsWith('Bild'))
+  $('report-kind').innerHTML = (wish ? WISH_KINDS : REPORT_KINDS.filter((k) => card || !k.startsWith('Bild')))
     .map((k) => `<option>${esc(k)}</option>`).join('');
-  if (!card) $('report-kind').value = 'App funktioniert nicht richtig';
+  if (!card && !wish) $('report-kind').value = 'App funktioniert nicht richtig';
   $('report-text').value = '';
   $('report-error').hidden = true;
   $('report-hint').textContent = 'Die Meldung geht direkt an die Akademie. Ohne Internet öffnet sich stattdessen eine vorbereitete E-Mail.';
@@ -643,13 +721,18 @@ async function sendReport(e) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        kind, text, app: APP_VERSION,
+        type: reportType, kind, text, app: APP_VERSION,
         content: state.modules.map((x) => `${x.title} (Stand ${x.version})`).join(', '),
         ...(reportCard ? { cardId: reportCard.id, deck: reportCard.deck, question: plainText(reportCard.q) } : {}),
       }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    toast('Danke! Deine Meldung ist bei der Akademie angekommen.');
+    const { token } = await r.json();
+    // Beleg merken: darüber kommen Status und Antwort der Akademie ("Meine Rückmeldungen")
+    if (token) save(KEY_MINE, [...load(KEY_MINE, []), { token, type: reportType, kind, text: text.slice(0, 200), created: Date.now() }]);
+    toast(reportType === 'wunsch'
+      ? 'Danke für deine Idee! Die Antwort siehst du unter „Meine Rückmeldungen“.'
+      : 'Danke! Deine Meldung ist angekommen. Die Antwort siehst du unter „Meine Rückmeldungen“.');
     $('report').hidden = true;
     return;
   } catch (err) {
@@ -776,6 +859,9 @@ function bind() {
     if (action === 'update') await refresh(true);
     if (action === 'stats') renderStats();
     if (action === 'report') openReport(null);
+    if (action === 'wish') openReport(null, 'wunsch');
+    if (action === 'mine') openMine();
+    if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
@@ -819,7 +905,8 @@ async function main() {
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   await refresh(false);
-  if (!load(KEY_TOUR, false) && state.cards.length) karla(true);
+  if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); } else showNews();
+  checkMine();
   sendStats();
 }
 
