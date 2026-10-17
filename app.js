@@ -210,11 +210,22 @@ async function loadServerModules(removed) {
       }
       save(KEY_CODES, codes.filter((x) => !r.invalid.includes(x.code)));
     }
+    // Zuordnung Code -> Modul vom Server übernehmen (Codes können im Admin-Panel umgehängt werden)
+    const fixed = load(KEY_CODES, []).map((c) => {
+      const m = r.modules.find((x) => x.code && x.code === c.code);
+      return m ? { ...c, module: m.id, title: m.title } : c;
+    });
+    save(KEY_CODES, fixed);
     const out = [];
     for (const m of r.modules) {
-      const code = load(KEY_CODES, []).find((c) => c.module === m.id)?.code;
-      if (cache[m.id]?.version !== m.version) cache[m.id] = await postJson('/api/module', { id: m.id, code });
-      out.push(cache[m.id]);
+      try {
+        const code = m.code || fixed.find((c) => c.module === m.id)?.code;
+        if (cache[m.id]?.version !== m.version) cache[m.id] = await postJson('/api/module', { id: m.id, code });
+        out.push(cache[m.id]);
+      } catch (e) {
+        console.warn('Modul nicht geladen', m.id, e);
+        if (cache[m.id]) out.push(cache[m.id]);
+      }
     }
     for (const id of Object.keys(cache)) if (!r.modules.some((m) => m.id === id)) delete cache[id];
     save(KEY_SERVER_CACHE, cache);
