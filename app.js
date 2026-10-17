@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.6.0';
+const APP_VERSION = 'Web 0.6.1';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -511,10 +511,10 @@ async function setStatsOptIn(on) {
     toast('Ausgeschaltet. Löschen auf dem Server klappt beim nächsten Online-Sein.');
   }
 }
-/** Höchstens alle 30 Minuten: zusammengefasster Stand je Kapitel + Antworten heute. */
+/** Höchstens alle 5 Minuten: zusammengefasster Stand je Kapitel + Antworten heute. */
 async function sendStats(force = false) {
   if (!statsOptIn() || !state.cards.length) return;
-  if (!force && Date.now() - load(KEY_STATS_SENT, 0) < 30 * MIN) return;
+  if (!force && Date.now() - load(KEY_STATS_SENT, 0) < 5 * MIN) return;
   const decks = [...new Set(state.cards.map((c) => c.deck))].map((deck) => {
     const cards = state.cards.filter((c) => c.deck === deck);
     return {
@@ -628,6 +628,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.6.1', date: '17.10.2026', items: [
+    'Neue Karten kommen automatisch – der Knopf „Nach neuen Karten suchen“ ist entfallen.',
+  ] },
   { version: 'Web 0.6.0', date: '17.10.2026', items: [
     '„Feedback geben“: Fehler melden und Ideen vorschlagen jetzt an einer Stelle im Menü.',
     'PTI 1 wird jetzt zentral gepflegt – Korrekturen erreichen dich schneller. Dein Lernstand bleibt erhalten.',
@@ -927,15 +930,15 @@ function bind() {
     const b = e.target.closest('button[data-ease]');
     if (b) answer(Number(b.dataset.ease));
   });
-  $('btn-back').addEventListener('click', renderDecks);
-  $('btn-done').addEventListener('click', renderDecks);
+  // Zurück zur Übersicht: Inhalte sind aktuell (Server), Lernstand für die Statistik senden
+  $('btn-back').addEventListener('click', () => { renderDecks(); sendStats(); });
+  $('btn-done').addEventListener('click', () => { renderDecks(); sendStats(); });
   $('dialog-close').addEventListener('click', () => { $('dialog').hidden = true; });
   $('btn-menu').addEventListener('click', (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; });
   document.addEventListener('click', () => { $('menu').hidden = true; });
   $('menu').addEventListener('click', async (e) => {
     const action = e.target.dataset.action;
     if (action === 'assistant') karla(true);
-    if (action === 'update') await refresh(true);
     if (action === 'stats') renderStats();
     if (action === 'feedback') openReport(null, 'fehler');
     if (action === 'mine') openMine();
@@ -965,7 +968,7 @@ function bind() {
   });
   // Nach längerer Pause im Hintergrund: Inhalte prüfen und Übersicht auffrischen
   document.addEventListener('visibilitychange', () => {
-    // Beim Verlassen der App den Stand senden (nur mit Einwilligung, höchstens alle 30 Min.)
+    // Beim Verlassen der App den Stand senden (abschaltbar, höchstens alle 5 Min.)
     if (document.visibilityState === 'hidden') sendStats();
     if (document.visibilityState === 'visible' && !$('view-decks').hidden) refresh(false);
   });
