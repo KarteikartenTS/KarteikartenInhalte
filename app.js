@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.6.1';
+const APP_VERSION = 'Web 0.7.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -31,6 +31,9 @@ const KEY_MINE = 'tuev.mine.v1';            // eigene Einsendungen: [{ token, ty
 const KEY_MINE_SEEN = 'tuev.mine.seen.v1';  // gelesene Antworten: { token: replied }
 const KEY_SEEN_VERSION = 'tuev.seenversion.v1';
 const WISH_KINDS = ['Neue Funktion', 'Neue Inhalte / weiteres Modul', 'Verbesserung', 'Sonstiges'];
+const KEY_SYNC = 'tuev.sync.v1';            // Sync-Code dieses Geräts (verbindet Geräte, Ende-zu-Ende-verschlüsselt)
+const KEY_SYNC_AT = 'tuev.sync.at.v1';
+const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
 const KEY_CODES = 'tuev.codes.v1';          // freigeschaltete Module: [{ code, module, title }]
 const KEY_HIDDEN = 'tuev.hidden.v1';        // vom Lernenden entfernte Module (Lernstand bleibt)
 const KEY_SERVER_CACHE = 'tuev.servercache.v1'; // Server-Module für den Offline-Betrieb
@@ -138,6 +141,7 @@ function schedule(card, ease, now = Date.now()) {
   const t = today(now);
   const wasNew = p.t === 0;
   p.reps++;
+  p.last = now;   // für den Geräte-Sync: zuletzt beantwortete Version gewinnt
   if (p.t === 0 || p.t === 1) {
     const step = wasNew ? 0 : p.s;
     if (ease === 1) Object.assign(p, { t: 1, s: 0, due: now + LEARN_STEPS[0] * MIN });
@@ -628,6 +632,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.0', date: '17.10.2026', items: [
+    'Geräte verbinden: Lernstand auf Handy und PC abgleichen – QR-Code scannen, fertig. Ende-zu-Ende-verschlüsselt.',
+  ] },
   { version: 'Web 0.6.1', date: '17.10.2026', items: [
     'Neue Karten kommen automatisch – der Knopf „Nach neuen Karten suchen“ ist entfallen.',
   ] },
@@ -669,6 +676,180 @@ function showNews(force = false) {
   dialog('Was ist neu?', entries.map((c) => `<h3>${esc(c.version.replace('Web ', 'Version '))} <small class="muted">${esc(c.date)}</small></h3>
     <ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')
     + '<p class="hint">Fehlt dir etwas? Menü → „Feedback geben“.</p>');
+  return true;
+}
+
+// ---------- Geräte-Sync (QR-Code, Ende-zu-Ende-verschlüsselt) ----------
+const SYNC_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const normSync = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const fmtSync = (c) => normSync(c).match(/.{1,4}/g)?.join('-') || '';
+const enc = (t) => new TextEncoder().encode(t);
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
+let syncBusy = null;
+
+function newSyncCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return fmtSync([...bytes].map((b) => SYNC_ALPHABET[b % 32]).join(''));
+}
+/** Aus dem Code: Adresse auf dem Server (Hash) und AES-Schlüssel (bleibt auf dem Gerät). */
+async function syncKeys(code) {
+  const n = normSync(code);
+  const id = [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc(`karteikarten-sync-id:${n}`)))]
+    .map((x) => x.toString(16).padStart(2, '0')).join('');
+  const base = await crypto.subtle.importKey('raw', enc(n), 'HKDF', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc('karteikarten-sync-v1'), info: enc('aes-gcm') },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  return { id, key };
+}
+async function encryptJson(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc(JSON.stringify(obj)));
+  return JSON.stringify({ v: 1, iv: b64(iv), ct: b64(ct) });
+}
+async function decryptJson(key, text) {
+  const { iv, ct } = JSON.parse(text);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(iv) }, key, unb64(ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+/** Zwei Stände zusammenführen: je Karte gewinnt die zuletzt beantwortete Version. */
+function mergeSync(a, b) {
+  const progress = { ...a.progress };
+  for (const [id, p] of Object.entries(b.progress || {})) {
+    const q = progress[id];
+    if (!q || (p.last || 0) > (q.last || 0) || ((p.last || 0) === (q.last || 0) && (p.reps || 0) > (q.reps || 0))) progress[id] = p;
+  }
+  const byKey = new Map([...(a.revlog || []), ...(b.revlog || [])].map((r) => [`${r.t}|${r.id}`, r]));
+  const revlog = [...byKey.values()].sort((x, y) => x.t - y.t).slice(-20000);
+  const union = (x, y, k) => [...new Map([...(x || []), ...(y || [])].map((e) => [e[k], e])).values()];
+  return { progress, revlog, codes: union(a.codes, b.codes, 'module'), mine: union(a.mine, b.mine, 'token') };
+}
+const localSyncState = () => ({ progress: state.progress, revlog: state.revlog, codes: load(KEY_CODES, []), mine: load(KEY_MINE, []) });
+
+/** Abgleich mit dem Server: holen, zusammenführen, lokal übernehmen, verschlüsselt zurückschreiben. */
+function syncNow() {
+  const code = load(KEY_SYNC, null);
+  if (!code) return Promise.resolve(false);
+  if (syncBusy) return syncBusy;
+  syncBusy = (async () => {
+    try {
+      const { id, key } = await syncKeys(code);
+      const remote = await postJson('/api/sync/get', { id });
+      const local = localSyncState();
+      const merged = remote.data ? mergeSync(local, await decryptJson(key, remote.data)) : local;
+      const changed = JSON.stringify(merged.progress) !== JSON.stringify(local.progress)
+        || merged.codes.length !== local.codes.length;
+      state.progress = merged.progress;
+      state.revlog = merged.revlog;
+      save(KEY_PROGRESS, merged.progress);
+      save(KEY_REVLOG, merged.revlog);
+      save(KEY_CODES, merged.codes);
+      save(KEY_MINE, merged.mine);
+      await postJson('/api/sync/put', { id, data: await encryptJson(key, merged) });
+      save(KEY_SYNC_AT, Date.now());
+      if (changed) {
+        if (merged.codes.length !== local.codes.length) await refresh(false);
+        else if (!$('view-decks').hidden) renderDecks();
+      }
+      return changed;
+    } catch (e) {
+      console.warn('Sync fehlgeschlagen', e);
+      return false;
+    } finally {
+      syncBusy = null;
+    }
+  })();
+  return syncBusy;
+}
+
+async function connectSync(code, { create = false } = {}) {
+  const c = fmtSync(code);
+  if (normSync(c).length !== 16) throw new Error('Der Code hat 16 Zeichen, z. B. ABCD-EFGH-JKLM-NPQR.');
+  if (!create) {
+    const { id } = await syncKeys(c);
+    const remote = await postJson('/api/sync/get', { id });
+    if (!remote.data) throw new Error('Zu diesem Code gibt es noch keinen Lernstand. Bitte Code prüfen.');
+  }
+  save(KEY_SYNC, c);
+  await syncNow();
+  return c;
+}
+
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = QR_LIB; s.onload = resolve; s.onerror = () => reject(new Error('QR-Code konnte nicht geladen werden (offline?).'));
+    document.head.appendChild(s);
+  });
+}
+const syncLink = (code) => `${location.origin}${location.pathname}#sync=${normSync(code)}`;
+
+async function openSync() {
+  const code = load(KEY_SYNC, null);
+  if (!code) {
+    dialog('Geräte verbinden', `
+      <p>Lerne auf Handy und PC mit demselben Lernstand. Dein Lernstand wird verschlüsselt übertragen – nur deine Geräte können ihn lesen.</p>
+      <button class="btn-primary sync-wide" id="sync-create">Sync auf diesem Gerät einrichten</button>
+      <h3>Schon auf einem anderen Gerät eingerichtet?</h3>
+      <p class="hint">Scanne dort den QR-Code mit der Kamera – oder gib den Code hier ein:</p>
+      <form id="sync-join" class="unlock-row"><input id="sync-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH-JKLM-NPQR">
+        <button class="btn-primary" type="submit">Verbinden</button></form>
+      <p class="field-error" id="sync-error" hidden></p>`);
+    $('sync-create').onclick = async () => {
+      try { await connectSync(newSyncCode(), { create: true }); openSync(); } catch (err) { $('sync-error').textContent = err.message; $('sync-error').hidden = false; }
+    };
+    $('sync-join').onsubmit = async (ev) => {
+      ev.preventDefault();
+      try { await connectSync($('sync-code').value); $('dialog').hidden = true; toast('Verbunden! Dein Lernstand ist jetzt auf beiden Geräten.'); }
+      catch (err) { $('sync-error').textContent = err.message; $('sync-error').hidden = false; }
+    };
+    return;
+  }
+  const at = load(KEY_SYNC_AT, 0);
+  dialog('Geräte verbinden', `
+    <p><b>Mit dem Smartphone scannen</b> (Kamera-App), um dieses Gerät zu verbinden:</p>
+    <div class="qr" id="sync-qr"><span class="hint">QR-Code wird erzeugt …</span></div>
+    <p class="sync-code">${esc(code)}</p>
+    <p class="hint">Nutzt du die App vom Home-Bildschirm (iPhone)? Dann dort ⋮ → „Geräte verbinden“ öffnen und den Code eintippen.
+      Gib den Code nicht weiter – wer ihn hat, sieht deinen Lernstand.</p>
+    <p class="hint">Zuletzt abgeglichen: ${at ? new Date(at).toLocaleString('de-DE') : 'noch nie'}</p>
+    <div class="sync-actions"><button class="btn-secondary" id="sync-now">Jetzt abgleichen</button>
+      <button class="btn-secondary" id="sync-off">Dieses Gerät trennen</button></div>`);
+  $('sync-now').onclick = async () => { const ch = await syncNow(); toast(ch ? 'Abgeglichen – neuer Lernstand übernommen.' : 'Abgeglichen – alles aktuell.'); openSync(); };
+  $('sync-off').onclick = () => {
+    if (!confirm('Dieses Gerät vom Sync trennen? Der Lernstand bleibt auf dem Gerät erhalten.')) return;
+    try { localStorage.removeItem(KEY_SYNC); } catch {}
+    $('dialog').hidden = true;
+    toast('Getrennt.');
+  };
+  try {
+    await loadQrLib();
+    const qr = window.qrcode(0, 'M');
+    qr.addData(syncLink(code));
+    qr.make();
+    $('sync-qr').innerHTML = qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true });
+  } catch (err) {
+    $('sync-qr').innerHTML = `<span class="hint">${esc(err.message)}</span>`;
+  }
+}
+
+/** Aufruf über den QR-Code (…#sync=CODE): nach Rückfrage verbinden. */
+async function acceptSyncLink() {
+  const m = /[#&]sync=([A-Za-z0-9-]+)/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  const code = fmtSync(m[1]);
+  const current = load(KEY_SYNC, null);
+  if (current && normSync(current) === normSync(code)) { syncNow(); return true; }
+  if (!confirm(`Dieses Gerät mit deinem Lernstand verbinden?\n\nCode ${code}${current ? '\n\nAchtung: Die bisherige Verbindung wird ersetzt.' : ''}`)) return false;
+  try {
+    await connectSync(code);
+    karla(true, [['Verbunden!', 'Dein Lernstand ist jetzt auf diesem Gerät. Ab sofort gleichen sich deine Geräte automatisch ab.']], 'celebrate');
+  } catch (err) {
+    toast(err.message);
+  }
   return true;
 }
 
@@ -931,8 +1112,8 @@ function bind() {
     if (b) answer(Number(b.dataset.ease));
   });
   // Zurück zur Übersicht: Inhalte sind aktuell (Server), Lernstand für die Statistik senden
-  $('btn-back').addEventListener('click', () => { renderDecks(); sendStats(); });
-  $('btn-done').addEventListener('click', () => { renderDecks(); sendStats(); });
+  $('btn-back').addEventListener('click', () => { renderDecks(); sendStats(); syncNow(); });
+  $('btn-done').addEventListener('click', () => { renderDecks(); sendStats(); syncNow(); });
   $('dialog-close').addEventListener('click', () => { $('dialog').hidden = true; });
   $('btn-menu').addEventListener('click', (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; });
   document.addEventListener('click', () => { $('menu').hidden = true; });
@@ -941,6 +1122,7 @@ function bind() {
     if (action === 'assistant') karla(true);
     if (action === 'stats') renderStats();
     if (action === 'feedback') openReport(null, 'fehler');
+    if (action === 'sync') openSync();
     if (action === 'mine') openMine();
     if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
@@ -969,7 +1151,7 @@ function bind() {
   // Nach längerer Pause im Hintergrund: Inhalte prüfen und Übersicht auffrischen
   document.addEventListener('visibilitychange', () => {
     // Beim Verlassen der App den Stand senden (abschaltbar, höchstens alle 5 Min.)
-    if (document.visibilityState === 'hidden') sendStats();
+    if (document.visibilityState === 'hidden') { sendStats(); syncNow(); }
     if (document.visibilityState === 'visible' && !$('view-decks').hidden) refresh(false);
   });
 }
@@ -997,6 +1179,8 @@ async function main() {
   else showNews();
   checkMine();
   sendStats();
+  // Sync-Link aus dem QR-Code (…#sync=CODE) übernehmen, sonst normal abgleichen
+  if (!(await acceptSyncLink())) syncNow();
 }
 
 main();
