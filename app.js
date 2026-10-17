@@ -577,7 +577,8 @@ function openModules() {
       // Karla freut sich mit (statt kurzer Hinweis unten)
       karlaUnlocked(r.module.id, r.module.title);
     } catch (err) {
-      $('unlock-error').textContent = err.status === 404 ? 'Dieser Code ist ungültig oder abgelaufen.' : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
+      // Server-Meldung zeigen (ungültig, abgelaufen oder Kontingent aufgebraucht)
+      $('unlock-error').textContent = err.status === 404 ? err.message : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
       $('unlock-error').hidden = false;
     }
   });
