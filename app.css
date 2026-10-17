@@ -203,6 +203,9 @@ button { font: inherit; cursor: pointer; }
 .status-pill.s-abgelehnt { background: #F3F4F6; color: #5F6368; }
 .mine-reply { margin-top: 6px; background: #F3F6FA; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
 .mine-reply.new { background: #E6F0FA; border-left: 3px solid var(--blue); }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #EEF1F4; border-radius: 10px; padding: 4px; margin: 4px 0 6px; }
+.segmented button { border: 0; background: none; border-radius: 8px; padding: 9px 6px; font-size: 14px; color: var(--muted); }
+.segmented button[aria-checked="true"] { background: #fff; color: var(--blue); font-weight: 600; box-shadow: 0 1px 3px #0002; }
 .mod-row .btn-secondary { padding: 8px 14px; font-size: 14px; }
 .btn-secondary { background: none; border: 1px solid #C4C7CC; border-radius: 22px; padding: 12px 20px; font-size: 16px; color: var(--text); }
 

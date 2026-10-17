@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.5.1';
+const APP_VERSION = 'Web 0.6.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -195,6 +195,7 @@ async function postJson(path, body) {
 async function loadServerModules(removed) {
   const codes = load(KEY_CODES, []);
   const cache = load(KEY_SERVER_CACHE, {});
+  const result = { modules: [], reachable: false, known: [] };
   try {
     const r = await postJson('/api/modules', { codes: codes.map((c) => c.code) });
     // Ungültige oder gesperrte Codes: Modul entfernen und Bescheid sagen
@@ -213,10 +214,10 @@ async function loadServerModules(removed) {
     }
     for (const id of Object.keys(cache)) if (!r.modules.some((m) => m.id === id)) delete cache[id];
     save(KEY_SERVER_CACHE, cache);
-    return out;
+    return { modules: out, reachable: true, known: r.known || r.modules.map((m) => m.id) };
   } catch (e) {
     console.warn('Server-Module offline aus dem Zwischenspeicher', e);
-    return Object.values(cache);
+    return { ...result, modules: Object.values(cache) };
   }
 }
 
@@ -224,16 +225,20 @@ async function loadContent() {
   const versions = load(KEY_VERSIONS, {});
   const changed = [];
   const removed = [];
-  const list = await fetchJson('content/modules.json');
-  const all = [];
+  // Zuerst der Admin-Server (dort werden die Inhalte gepflegt) ...
+  const server = await loadServerModules(removed);
+  const all = [...server.modules];
+  // ... GitHub nur für Module, die der Server nicht kennt bzw. als Rückfall, wenn er nicht erreichbar ist
+  const list = await fetchJson('content/modules.json').catch(() => ({ modules: [] }));
   for (const m of list.modules) {
+    if (all.some((x) => x.id === m.id)) continue;
+    if (m.fallback && (server.reachable ? server.known.includes(m.id) : false)) continue;
     try {
       all.push(await fetchJson(`content/${m.id}/cards.json`));
     } catch (e) {
       console.warn('Modul nicht geladen', m.id, e);
     }
   }
-  all.push(...(await loadServerModules(removed)).filter((m) => !all.some((x) => x.id === m.id)));
   state.allModules = all;
   const hidden = load(KEY_HIDDEN, []);
   const modules = all.filter((m) => !hidden.includes(m.id));
@@ -474,21 +479,16 @@ function renderStats() {
     ${recent.length ? `<div class="answers">${[['Nochmal', COLORS.again], ['Schwer', COLORS.hard], ['Gut', COLORS.good], ['Einfach', COLORS.easy]].map(([name, color], i) => `
       <div class="arow"><span>${name}</span><div class="abar"><span style="width:${((100 * answers[i]) / total).toFixed(1)}%;background:${color}"></span></div><span class="pnum">${Math.round((100 * answers[i]) / total)} %</span></div>`).join('')}</div>`
       : '<p class="hint">Noch keine Antworten. Die Statistik füllt sich, sobald du lernst.</p>'}
-    <h2>Anonyme Lernstatistik</h2>
-    <label class="optin"><input type="checkbox" id="stats-optin" ${statsOptIn() ? 'checked' : ''}>
-      <span>Anonyme Lernstatistik an die TÜV SÜD Akademie senden</span></label>
-    <p class="hint">Hilft der Akademie zu sehen, welche Kapitel schwerfallen. Gesendet werden nur zusammengefasste Werte je Kapitel
-      (z. B. „12 von 20 Karten begonnen“) und die Zahl der Antworten pro Tag – ohne Namen, ohne einzelne Antworten.
-      Ausgewertet wird nur in Gruppen ab 5 Lernenden. Ausschalten löscht deine Daten auf dem Server.</p>
+    <p class="hint">Anonyme Nutzungsstatistik: ${statsOptIn() ? 'an' : 'aus'} – ändern unter ⋮ → „Über diese App“.</p>
     <p class="hint">Gezählt wird ab dem ${log.length ? new Date(log[0].t).toLocaleDateString('de-DE') : 'ersten Lernen'} auf diesem Gerät.</p>`;
-  $('stats-optin').addEventListener('change', (e) => setStatsOptIn(e.target.checked));
   $('title').textContent = 'Statistik';
   $('subtitle').textContent = '';
   show('view-stats');
 }
 
 // ---------- Anonyme Lernstatistik (nur mit Einwilligung) ----------
-const statsOptIn = () => load(KEY_STATS_OPT, false) === true;
+// Standardmäßig an (Entscheidung 2026-10-17); abschaltbar unter „Über diese App“
+const statsOptIn = () => load(KEY_STATS_OPT, null) !== false;
 function deviceId() {
   let id = load(KEY_DEVICE, null);
   if (!id) { id = crypto.randomUUID(); save(KEY_DEVICE, id); }
@@ -499,7 +499,7 @@ async function setStatsOptIn(on) {
   if (on) {
     save(KEY_STATS_SENT, 0);
     await sendStats();
-    toast('Danke! Anonyme Statistik ist eingeschaltet.');
+    toast('Anonyme Nutzungsstatistik ist eingeschaltet.');
     return;
   }
   const id = load(KEY_DEVICE, null);
@@ -619,7 +619,7 @@ async function openMine() {
   }).join('');
   dialog('Meine Rückmeldungen', mine.length
     ? `<ul class="mod-list">${rows}</ul><p class="hint">Hier siehst du, was aus deinen Meldungen und Ideen geworden ist. Gespeichert nur auf diesem Gerät.</p>`
-    : '<p>Du hast noch nichts eingesendet. Fehler meldest du beim Lernen über „Fehler melden“, Ideen über das Menü „Idee vorschlagen“.</p>');
+    : '<p>Du hast noch nichts eingesendet. Fehler meldest du beim Lernen über „Fehler melden“, Fehler und Ideen außerdem über das Menü „Feedback geben“.</p>');
   // Als gelesen markieren
   for (const r of mineCache) if (r.replied) seen[r.token] = r.replied;
   save(KEY_MINE_SEEN, seen);
@@ -628,6 +628,11 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.6.0', date: '17.10.2026', items: [
+    '„Feedback geben“: Fehler melden und Ideen vorschlagen jetzt an einer Stelle im Menü.',
+    'PTI 1 wird jetzt zentral gepflegt – Korrekturen erreichen dich schneller. Dein Lernstand bleibt erhalten.',
+    'Anonyme Nutzungsstatistik hilft der Akademie, die Module zu verbessern – abschaltbar unter ⋮ → „Über diese App“.',
+  ] },
   { version: 'Web 0.5.1', date: '17.10.2026', items: [
     'Karla freut sich mit: Beim Freischalten eines Moduls zeigt sie dir, was neu ist und wo du anfängst.',
   ] },
@@ -654,13 +659,14 @@ const CHANGELOG = [
 function showNews(force = false) {
   const seen = load(KEY_SEEN_VERSION, null);
   save(KEY_SEEN_VERSION, APP_VERSION);
-  // Bestehende Nutzer ohne gespeicherte Version (vor 0.5.0) sehen die neueste Änderung
-  if (!force && (seen === APP_VERSION || (!seen && !load(KEY_TOUR, false)))) return;
+  const shown = force || !(seen === APP_VERSION || (!seen && !load(KEY_TOUR, false)));
+  if (!shown) return false;
   const idx = force ? CHANGELOG.length : Math.max(1, CHANGELOG.findIndex((c) => c.version === seen));
   const entries = CHANGELOG.slice(0, idx === -1 ? CHANGELOG.length : idx);
   dialog('Was ist neu?', entries.map((c) => `<h3>${esc(c.version.replace('Web ', 'Version '))} <small class="muted">${esc(c.date)}</small></h3>
     <ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')
-    + '<p class="hint">Fehlt dir etwas? Menü → „Idee vorschlagen“.</p>');
+    + '<p class="hint">Fehlt dir etwas? Menü → „Feedback geben“.</p>');
+  return true;
 }
 
 // ---------- Fehler melden ----------
@@ -676,7 +682,10 @@ function openReport(card, type = 'fehler') {
   reportCard = card;
   reportType = type;
   const wish = type === 'wunsch';
-  $('report-title').textContent = wish ? 'Idee oder Wunsch einreichen' : card ? 'Fehler mit dieser Karte melden' : 'Fehler melden';
+  $('report-title').textContent = card ? 'Fehler mit dieser Karte melden' : 'Feedback geben';
+  // Umschalter Fehler/Idee nur beim allgemeinen Feedback (nicht bei einer konkreten Karte)
+  $('report-switch').hidden = !!card;
+  for (const b of $('report-switch').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.type === type));
   $('report-text-label').firstChild.textContent = wish ? 'Was wünschst du dir? ' : 'Was ist falsch? ';
   $('report-text').placeholder = wish ? 'z. B. Ein Modul zu Bremsen wäre super, weil …' : 'z. B. Der Grenzwert ist seit 2021 ein anderer: …';
   const info = $('report-card-info');
@@ -783,19 +792,25 @@ function aboutHtml() {
       <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid', 'Quellcode der Android-App auf GitHub')} (GPL-3.0, basiert auf AnkiDroid)</li>
     </ul>
 
-    <h3>Fehler gefunden?</h3>
+    <h3>Fehler gefunden oder eine Idee?</h3>
     <ul>
       <li>Fehler in einer Karte: beim Lernen oben rechts auf „Fehler melden“ tippen. Die Karte wird automatisch mitgeschickt.</li>
-      <li>Fehler in der App: <a href="#" id="about-report">Fehler melden</a></li>
+      <li>Fehler in der App oder eine Idee: <a href="#" id="about-report">Feedback geben</a></li>
     </ul>
 
     <h3>Hinweise</h3>
     <ul>
       <li>Demo-Version: Die Karten sind unvollständig und dienen nur dem Kennenlernen.</li>
-      <li>Keine Anmeldung, kein Tracking. Dein Lernstand wird auf diesem Gerät gespeichert.</li>
-      <li>Anonyme Lernstatistik nur, wenn du sie unter „Statistik“ einschaltest.</li>
+      <li>Keine Anmeldung, keine Werbung. Dein Lernstand wird auf diesem Gerät gespeichert.</li>
       <li>Die Seite wird über GitHub Pages ausgeliefert. Dabei verarbeitet GitHub technisch notwendige Verbindungsdaten.</li>
     </ul>
+
+    <h3>Anonyme Nutzungsstatistik</h3>
+    <label class="optin"><input type="checkbox" id="stats-optin" ${statsOptIn() ? 'checked' : ''}>
+      <span>Anonyme Nutzungsstatistik an die TÜV SÜD Akademie senden</span></label>
+    <p class="hint">Gesendet werden nur zusammengefasste Werte: welche Module genutzt werden, wie viele Karten je Kapitel
+      begonnen bzw. gefestigt sind und wie viele Antworten pro Tag – mit einer zufälligen Geräte-ID, ohne Namen, ohne einzelne
+      Antworten. Ausgewertet wird nur in Gruppen ab 5 Lernenden. Ausschalten löscht deine Daten auf dem Server.</p>
   </div>`;
 }
 
@@ -813,6 +828,7 @@ const TIPS = [
 ];
 let tip = 0;
 let tips = TIPS;   // aktuelle Sprechblasen: die Tour oder ein Ereignis (z. B. Modul freigeschaltet)
+let askAnswer = null; // bei einer Ja/Nein-Frage von Karla: Rückruf mit true/false
 
 /** Karla zeigen (Tour oder Ereignis-Sprechblasen) bzw. ausblenden. mood "celebrate" = Freudensprung. */
 function karla(open, list = TIPS, mood = '') {
@@ -825,10 +841,21 @@ function karla(open, list = TIPS, mood = '') {
     k.hidden = false;
     if (mood) celebrate();
   } else {
-    if (tips === TIPS) save(KEY_TOUR, true);
+    const wasTour = tips === TIPS;
+    if (wasTour) save(KEY_TOUR, true);
+    askAnswer = null;
     k.classList.add('out');
     setTimeout(() => { k.hidden = true; }, 260);
   }
+}
+/** Karla stellt eine Ja/Nein-Frage. */
+function karlaAsk(title, text, yes, no, onAnswer) {
+  karla(true, [[title, text]]);
+  askAnswer = onAnswer;
+  $('karla-next').textContent = yes;
+  $('karla-back').textContent = no;
+  $('karla-back').classList.remove('invisible');
+  $('karla-close').hidden = true;
 }
 function renderTip() {
   $('karla-title').textContent = tips[tip][0];
@@ -837,6 +864,8 @@ function renderTip() {
   $('karla-back').classList.toggle('invisible', tip === 0);
   $('karla-next').textContent = tip === tips.length - 1 ? (tips === TIPS ? 'Fertig' : 'Danke!') : 'Weiter';
   $('karla-close').textContent = tips === TIPS ? 'Tipps schließen' : 'Schließen';
+  $('karla-close').hidden = false;
+  $('karla-back').textContent = 'Zurück';
 }
 /** Freudensprung mit ein paar Konfetti-Karten. */
 function celebrate() {
@@ -886,6 +915,13 @@ function bind() {
   $('btn-report-card').addEventListener('click', () => openReport(state.current));
   $('report-form').addEventListener('submit', sendReport);
   $('report-cancel').addEventListener('click', () => { $('report').hidden = true; });
+  $('report-switch').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-type]');
+    if (!b || b.dataset.type === reportType) return;
+    const text = $('report-text').value;
+    openReport(null, b.dataset.type);
+    $('report-text').value = text;   // bereits Geschriebenes behalten
+  });
   $('report-text').addEventListener('input', () => { $('report-error').hidden = true; });
   $('ease-buttons').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-ease]');
@@ -901,18 +937,24 @@ function bind() {
     if (action === 'assistant') karla(true);
     if (action === 'update') await refresh(true);
     if (action === 'stats') renderStats();
-    if (action === 'report') openReport(null);
-    if (action === 'wish') openReport(null, 'wunsch');
+    if (action === 'feedback') openReport(null, 'fehler');
     if (action === 'mine') openMine();
     if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
+      $('stats-optin').addEventListener('change', (ev) => setStatsOptIn(ev.target.checked));
       $('about-report').addEventListener('click', (ev) => { ev.preventDefault(); $('dialog').hidden = true; openReport(null); });
     }
   });
-  $('karla-next').addEventListener('click', () => { if (tip === tips.length - 1) karla(false); else { tip++; renderTip(); wiggle(); } });
-  $('karla-back').addEventListener('click', () => { tip = Math.max(0, tip - 1); renderTip(); wiggle(); });
+  $('karla-next').addEventListener('click', () => {
+    if (askAnswer) { const cb = askAnswer; karla(false); cb(true); return; }
+    if (tip === tips.length - 1) karla(false); else { tip++; renderTip(); wiggle(); }
+  });
+  $('karla-back').addEventListener('click', () => {
+    if (askAnswer) { const cb = askAnswer; karla(false); cb(false); return; }
+    tip = Math.max(0, tip - 1); renderTip(); wiggle();
+  });
   $('karla-close').addEventListener('click', () => karla(false));
   $('karla-figure').addEventListener('click', wiggle);
   document.addEventListener('keydown', (e) => {
@@ -948,7 +990,8 @@ async function main() {
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   await refresh(false);
-  if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); } else showNews();
+  if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); }
+  else showNews();
   checkMine();
   sendStats();
 }

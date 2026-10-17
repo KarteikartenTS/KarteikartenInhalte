@@ -1,6 +1,10 @@
 {
-  "_comment": "Module für die Web-App. Je Modul erzeugt tools/content-pipeline/export_web.py den Ordner content/<id>/.",
+  "_comment": "Module aus GitHub. \"fallback\": nur verwenden, wenn der Admin-Server das Modul nicht liefert (PTI 1 liegt seit 2026-10-17 auf dem Server, Bilder bleiben hier).",
   "modules": [
-    { "id": "pti-1", "title": "PTI 1" }
+    {
+      "id": "pti-1",
+      "title": "PTI 1",
+      "fallback": true
+    }
   ]
 }

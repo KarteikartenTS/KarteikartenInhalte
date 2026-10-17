@@ -36,8 +36,7 @@
     <button data-action="assistant">Lern-Assistent</button>
     <button data-action="stats">Statistik</button>
     <button data-action="modules">Module verwalten / freischalten</button>
-    <button data-action="report">Fehler melden</button>
-    <button data-action="wish">Idee vorschlagen</button>
+    <button data-action="feedback">Feedback geben (Fehler oder Idee)</button>
     <button data-action="mine">Meine Rückmeldungen <span class="dot" id="mine-dot" hidden></span></button>
     <button data-action="news">Was ist neu?</button>
     <button data-action="update">Nach neuen Karten suchen</button>
@@ -93,7 +92,11 @@
 
   <div id="report" class="dialog" hidden>
     <form class="dialog-box report-box" id="report-form" novalidate>
-      <h2 id="report-title">Fehler melden</h2>
+      <h2 id="report-title">Feedback geben</h2>
+      <div class="segmented" id="report-switch" role="radiogroup" aria-label="Art der Rückmeldung">
+        <button type="button" data-type="fehler" role="radio">Fehler melden</button>
+        <button type="button" data-type="wunsch" role="radio">Idee vorschlagen</button>
+      </div>
       <div id="report-card-info" class="report-card-info" hidden></div>
       <label for="report-kind">Art des Fehlers</label>
       <select id="report-kind"></select>
