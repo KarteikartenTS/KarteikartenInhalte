@@ -186,6 +186,13 @@ button { font: inherit; cursor: pointer; }
 .report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .report-actions .btn-primary { float: none; margin: 0; }
 .report-pre { white-space: pre-wrap; font-size: 12px; background: #F3F6FA; padding: 8px; border-radius: 8px; user-select: all; }
+.unlock label { display: block; font-weight: 600; margin-bottom: 6px; }
+.unlock-row { display: flex; gap: 8px; }
+.unlock-row input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px; border: 1px solid #C4C7CC; border-radius: 8px; text-transform: uppercase; }
+.unlock-row .btn-primary { float: none; margin: 0; }
+.mod-list { list-style: none; padding: 0; margin: 0; }
+.mod-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mod-row .btn-secondary { padding: 8px 14px; font-size: 14px; }
 .btn-secondary { background: none; border: 1px solid #C4C7CC; border-radius: 22px; padding: 12px 20px; font-size: 16px; color: var(--text); }
 
 .toast {

@@ -21,12 +21,15 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.3.0';
+const APP_VERSION = 'Web 0.4.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
 const KEY_DEVICE = 'tuev.device.v1';
 const KEY_STATS_SENT = 'tuev.stats.sent.v1';
+const KEY_CODES = 'tuev.codes.v1';          // freigeschaltete Module: [{ code, module, title }]
+const KEY_HIDDEN = 'tuev.hidden.v1';        // vom Lernenden entfernte Module (Lernstand bleibt)
+const KEY_SERVER_CACHE = 'tuev.servercache.v1'; // Server-Module für den Offline-Betrieb
 // Empfänger für Fehlermeldungen. Leer = Meldung wird zum Kopieren angeboten statt per Mail geöffnet.
 const REPORT_EMAIL = 'louis.thomee@partner.tuvsud.com';
 const REPORT_KINDS = ['Inhalt falsch oder veraltet', 'Antwort unvollständig', 'Tipp- oder Rechtschreibfehler', 'Bild fehlt oder ist falsch', 'App funktioniert nicht richtig', 'Sonstiges'];
@@ -177,22 +180,65 @@ async function fetchJson(url) {
   return r.json();
 }
 
+async function postJson(path, body) {
+  const r = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.fehler || `HTTP ${r.status}`), { status: r.status });
+  return data;
+}
+
+/** Module vom Server: öffentliche + per Code freigeschaltete. Offline aus dem Zwischenspeicher. */
+async function loadServerModules(removed) {
+  const codes = load(KEY_CODES, []);
+  const cache = load(KEY_SERVER_CACHE, {});
+  try {
+    const r = await postJson('/api/modules', { codes: codes.map((c) => c.code) });
+    // Ungültige oder gesperrte Codes: Modul entfernen und Bescheid sagen
+    if (r.invalid.length) {
+      for (const c of codes.filter((x) => r.invalid.includes(x.code))) {
+        removed.push(c.title);
+        delete cache[c.module];
+      }
+      save(KEY_CODES, codes.filter((x) => !r.invalid.includes(x.code)));
+    }
+    const out = [];
+    for (const m of r.modules) {
+      const code = load(KEY_CODES, []).find((c) => c.module === m.id)?.code;
+      if (cache[m.id]?.version !== m.version) cache[m.id] = await postJson('/api/module', { id: m.id, code });
+      out.push(cache[m.id]);
+    }
+    for (const id of Object.keys(cache)) if (!r.modules.some((m) => m.id === id)) delete cache[id];
+    save(KEY_SERVER_CACHE, cache);
+    return out;
+  } catch (e) {
+    console.warn('Server-Module offline aus dem Zwischenspeicher', e);
+    return Object.values(cache);
+  }
+}
+
 async function loadContent() {
   const versions = load(KEY_VERSIONS, {});
   const changed = [];
+  const removed = [];
   const list = await fetchJson('content/modules.json');
-  const modules = [];
+  const all = [];
   for (const m of list.modules) {
     try {
-      const data = await fetchJson(`content/${m.id}/cards.json`);
-      if (versions[m.id] && versions[m.id] !== data.version) changed.push(data.title);
-      versions[m.id] = data.version;
-      modules.push(data);
+      all.push(await fetchJson(`content/${m.id}/cards.json`));
     } catch (e) {
       console.warn('Modul nicht geladen', m.id, e);
     }
   }
+  all.push(...(await loadServerModules(removed)).filter((m) => !all.some((x) => x.id === m.id)));
+  state.allModules = all;
+  const hidden = load(KEY_HIDDEN, []);
+  const modules = all.filter((m) => !hidden.includes(m.id));
+  for (const data of modules) {
+    if (versions[data.id] && versions[data.id] !== data.version) changed.push(data.title);
+    versions[data.id] = data.version;
+  }
   save(KEY_VERSIONS, versions);
+  if (removed.length) setTimeout(() => toast(`Nicht mehr freigeschaltet: ${removed.join(', ')}`), 4200);
   state.modules = modules;
   state.cards = modules.flatMap((m) => m.cards.map((c, i) => ({ ...c, module: m.id, order: i })));
   return changed;
@@ -487,6 +533,59 @@ async function sendStats(force = false) {
   }
 }
 
+// ---------- Module verwalten: freischalten per Code, entfernen, wieder hinzufügen ----------
+function openModules() {
+  const hidden = load(KEY_HIDDEN, []);
+  const codes = load(KEY_CODES, []);
+  const rows = (state.allModules || []).map((m) => {
+    const isHidden = hidden.includes(m.id);
+    const byCode = codes.find((c) => c.module === m.id);
+    return `<li class="mod-row"><span><b>${esc(m.title)}</b><br><small class="muted">${m.cards.length} Karten${byCode ? ' · per Code freigeschaltet' : ''}${isHidden ? ' · entfernt' : ''}</small></span>
+      ${isHidden ? `<button class="btn-secondary" data-mod-add="${esc(m.id)}">Hinzufügen</button>` : `<button class="btn-secondary" data-mod-remove="${esc(m.id)}">Entfernen</button>`}</li>`;
+  }).join('');
+  dialog('Module verwalten', `
+    <form id="unlock-form" class="unlock">
+      <label for="unlock-code">Modul freischalten</label>
+      <div class="unlock-row"><input id="unlock-code" autocomplete="off" autocapitalize="characters" placeholder="Code, z. B. MUEN-AB2C-XY3Z">
+      <button class="btn-primary" type="submit">Freischalten</button></div>
+      <p class="field-error" id="unlock-error" hidden></p>
+      <p class="hint">Den Code bekommst du von der TÜV SÜD Akademie, z. B. zu deinem Lehrgang.</p>
+    </form>
+    <h3>Deine Module</h3>
+    <ul class="mod-list">${rows || '<li class="muted">Noch keine Module.</li>'}</ul>
+    <p class="hint">Entfernen blendet ein Modul aus. Dein Lernstand bleibt gespeichert und ist wieder da, wenn du es erneut hinzufügst.</p>`);
+  $('unlock-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('unlock-code').value.trim();
+    if (!code) return;
+    try {
+      const r = await postJson('/api/unlock', { code });
+      const list = load(KEY_CODES, []).filter((c) => c.module !== r.module.id);
+      list.push({ code: r.code, module: r.module.id, title: r.module.title });
+      save(KEY_CODES, list);
+      save(KEY_HIDDEN, load(KEY_HIDDEN, []).filter((id) => id !== r.module.id));
+      $('dialog').hidden = true;
+      await refresh(false);
+      toast(`„${r.module.title}“ ist freigeschaltet.`);
+    } catch (err) {
+      $('unlock-error').textContent = err.status === 404 ? 'Dieser Code ist ungültig oder abgelaufen.' : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
+      $('unlock-error').hidden = false;
+    }
+  });
+  $('dialog-text').querySelectorAll('[data-mod-remove]').forEach((b) => b.addEventListener('click', async () => {
+    const m = state.allModules.find((x) => x.id === b.dataset.modRemove);
+    if (!confirm(`„${m.title}“ aus deiner Übersicht entfernen? Dein Lernstand bleibt gespeichert.`)) return;
+    save(KEY_HIDDEN, [...new Set([...load(KEY_HIDDEN, []), m.id])]);
+    await refresh(false);
+    openModules();
+  }));
+  $('dialog-text').querySelectorAll('[data-mod-add]').forEach((b) => b.addEventListener('click', async () => {
+    save(KEY_HIDDEN, load(KEY_HIDDEN, []).filter((id) => id !== b.dataset.modAdd));
+    await refresh(false);
+    openModules();
+  }));
+}
+
 // ---------- Fehler melden ----------
 const plainText = (html) => {
   const d = document.createElement('div');
@@ -677,6 +776,7 @@ function bind() {
     if (action === 'update') await refresh(true);
     if (action === 'stats') renderStats();
     if (action === 'report') openReport(null);
+    if (action === 'modules') openModules();
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
       $('about-report').addEventListener('click', (ev) => { ev.preventDefault(); $('dialog').hidden = true; openReport(null); });
