@@ -129,6 +129,8 @@ button { font: inherit; cursor: pointer; }
 .stats svg { width: 100%; height: auto; display: block; }
 .stats svg .axis { font-size: 10px; fill: var(--muted); }
 .stats svg .base { stroke: #C4C7CC; stroke-width: 1; }
+.optin { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; margin: 6px 0; }
+.optin input { width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; }
 .hint { color: var(--muted); font-size: 13px; }
 
 /* Lernen */

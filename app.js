@@ -21,7 +21,12 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.2.0';
+const APP_VERSION = 'Web 0.3.0';
+// Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
+const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
+const KEY_STATS_OPT = 'tuev.stats.optin.v1';
+const KEY_DEVICE = 'tuev.device.v1';
+const KEY_STATS_SENT = 'tuev.stats.sent.v1';
 // Empfänger für Fehlermeldungen. Leer = Meldung wird zum Kopieren angeboten statt per Mail geöffnet.
 const REPORT_EMAIL = 'louis.thomee@partner.tuvsud.com';
 const REPORT_KINDS = ['Inhalt falsch oder veraltet', 'Antwort unvollständig', 'Tipp- oder Rechtschreibfehler', 'Bild fehlt oder ist falsch', 'App funktioniert nicht richtig', 'Sonstiges'];
@@ -419,10 +424,67 @@ function renderStats() {
     ${recent.length ? `<div class="answers">${[['Nochmal', COLORS.again], ['Schwer', COLORS.hard], ['Gut', COLORS.good], ['Einfach', COLORS.easy]].map(([name, color], i) => `
       <div class="arow"><span>${name}</span><div class="abar"><span style="width:${((100 * answers[i]) / total).toFixed(1)}%;background:${color}"></span></div><span class="pnum">${Math.round((100 * answers[i]) / total)} %</span></div>`).join('')}</div>`
       : '<p class="hint">Noch keine Antworten. Die Statistik füllt sich, sobald du lernst.</p>'}
+    <h2>Anonyme Lernstatistik</h2>
+    <label class="optin"><input type="checkbox" id="stats-optin" ${statsOptIn() ? 'checked' : ''}>
+      <span>Anonyme Lernstatistik an die TÜV SÜD Akademie senden</span></label>
+    <p class="hint">Hilft der Akademie zu sehen, welche Kapitel schwerfallen. Gesendet werden nur zusammengefasste Werte je Kapitel
+      (z. B. „12 von 20 Karten begonnen“) und die Zahl der Antworten pro Tag – ohne Namen, ohne einzelne Antworten.
+      Ausgewertet wird nur in Gruppen ab 5 Lernenden. Ausschalten löscht deine Daten auf dem Server.</p>
     <p class="hint">Gezählt wird ab dem ${log.length ? new Date(log[0].t).toLocaleDateString('de-DE') : 'ersten Lernen'} auf diesem Gerät.</p>`;
+  $('stats-optin').addEventListener('change', (e) => setStatsOptIn(e.target.checked));
   $('title').textContent = 'Statistik';
   $('subtitle').textContent = '';
   show('view-stats');
+}
+
+// ---------- Anonyme Lernstatistik (nur mit Einwilligung) ----------
+const statsOptIn = () => load(KEY_STATS_OPT, false) === true;
+function deviceId() {
+  let id = load(KEY_DEVICE, null);
+  if (!id) { id = crypto.randomUUID(); save(KEY_DEVICE, id); }
+  return id;
+}
+async function setStatsOptIn(on) {
+  save(KEY_STATS_OPT, on);
+  if (on) {
+    save(KEY_STATS_SENT, 0);
+    await sendStats();
+    toast('Danke! Anonyme Statistik ist eingeschaltet.');
+    return;
+  }
+  const id = load(KEY_DEVICE, null);
+  try {
+    if (id) await fetch(`${API_BASE}/api/stats/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: id }) });
+    try { localStorage.removeItem(KEY_DEVICE); } catch {}
+    toast('Ausgeschaltet. Deine Daten auf dem Server wurden gelöscht.');
+  } catch {
+    toast('Ausgeschaltet. Löschen auf dem Server klappt beim nächsten Online-Sein.');
+  }
+}
+/** Höchstens alle 30 Minuten: zusammengefasster Stand je Kapitel + Antworten heute. */
+async function sendStats(force = false) {
+  if (!statsOptIn() || !state.cards.length) return;
+  if (!force && Date.now() - load(KEY_STATS_SENT, 0) < 30 * MIN) return;
+  const decks = [...new Set(state.cards.map((c) => c.deck))].map((deck) => {
+    const cards = state.cards.filter((c) => c.deck === deck);
+    return {
+      deck,
+      total: cards.length,
+      seen: cards.filter((c) => progressOf(c).t !== 0).length,
+      solid: cards.filter((c) => progressOf(c).t === 2 && progressOf(c).ivl >= SOLID_DAYS).length,
+    };
+  });
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  try {
+    const r = await fetch(`${API_BASE}/api/stats`, {
+      method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device: deviceId(), day, app: APP_VERSION, answersToday: state.revlog.filter((x) => x.d === today()).length, decks }),
+    });
+    if (r.ok) save(KEY_STATS_SENT, Date.now());
+  } catch (e) {
+    console.warn('Statistik nicht gesendet', e);
+  }
 }
 
 // ---------- Fehler melden ----------
@@ -447,9 +509,7 @@ function openReport(card) {
   if (!card) $('report-kind').value = 'App funktioniert nicht richtig';
   $('report-text').value = '';
   $('report-error').hidden = true;
-  $('report-hint').textContent = REPORT_EMAIL
-    ? 'Dein Mailprogramm öffnet sich mit einer vorbereiteten Nachricht. Du musst nur noch auf Senden tippen.'
-    : 'Die Meldung wird in die Zwischenablage kopiert. Füge sie in eine Mail an die Akademie ein.';
+  $('report-hint').textContent = 'Die Meldung geht direkt an die Akademie. Ohne Internet öffnet sich stattdessen eine vorbereitete E-Mail.';
   $('report').hidden = false;
   $('report-text').focus();
 }
@@ -477,6 +537,27 @@ async function sendReport(e) {
     ? `Karteikarten-App: Fehler in Karte (${deckLabel(reportCard.deck)})`
     : `Karteikarten-App: ${kind}`;
   const body = reportBody(kind, text);
+  $('report-send').disabled = true;
+  try {
+    // Zuerst direkt ans Admin-Panel; nur wenn das nicht klappt, per E-Mail
+    const r = await fetch(`${API_BASE}/api/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind, text, app: APP_VERSION,
+        content: state.modules.map((x) => `${x.title} (Stand ${x.version})`).join(', '),
+        ...(reportCard ? { cardId: reportCard.id, deck: reportCard.deck, question: plainText(reportCard.q) } : {}),
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    toast('Danke! Deine Meldung ist bei der Akademie angekommen.');
+    $('report').hidden = true;
+    return;
+  } catch (err) {
+    console.warn('Meldung an Admin-Panel fehlgeschlagen, weiter per E-Mail', err);
+  } finally {
+    $('report-send').disabled = false;
+  }
   if (REPORT_EMAIL) {
     location.href = `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     toast('Danke! Bitte die Mail noch absenden.');
@@ -525,7 +606,8 @@ function aboutHtml() {
     <h3>Hinweise</h3>
     <ul>
       <li>Demo-Version: Die Karten sind unvollständig und dienen nur dem Kennenlernen.</li>
-      <li>Keine Anmeldung, kein Tracking. Dein Lernstand wird nur auf diesem Gerät gespeichert.</li>
+      <li>Keine Anmeldung, kein Tracking. Dein Lernstand wird auf diesem Gerät gespeichert.</li>
+      <li>Anonyme Lernstatistik nur, wenn du sie unter „Statistik“ einschaltest.</li>
       <li>Die Seite wird über GitHub Pages ausgeliefert. Dabei verarbeitet GitHub technisch notwendige Verbindungsdaten.</li>
     </ul>
   </div>`;
@@ -612,6 +694,8 @@ function bind() {
   });
   // Nach längerer Pause im Hintergrund: Inhalte prüfen und Übersicht auffrischen
   document.addEventListener('visibilitychange', () => {
+    // Beim Verlassen der App den Stand senden (nur mit Einwilligung, höchstens alle 30 Min.)
+    if (document.visibilityState === 'hidden') sendStats();
     if (document.visibilityState === 'visible' && !$('view-decks').hidden) refresh(false);
   });
 }
@@ -636,6 +720,7 @@ async function main() {
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   await refresh(false);
   if (!load(KEY_TOUR, false) && state.cards.length) karla(true);
+  sendStats();
 }
 
 main();
