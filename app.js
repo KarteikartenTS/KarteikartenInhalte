@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.0';
+const APP_VERSION = 'Web 0.8.1';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -383,7 +383,6 @@ function renderDecks() {
     : '';
   const n = state.cards.length;
   $('total').textContent = n ? `${n.toLocaleString('de-DE')} Karteikarten geladen` : '';
-  $('search').closest('.search-bar').hidden = !n;
   runSearch();
   show('view-decks');
 }
@@ -608,7 +607,7 @@ function mark(text, words) {
 }
 function runSearch() {
   const q = $('search').value.trim();
-  const active = q.length >= 2;
+  const active = q.length >= 3; // Treffer erst ab 3 Buchstaben
   $('search-results').hidden = !active;
   for (const id of ['deck-list', 'today', 'total']) $(id).hidden = active;
   if (!active) return;
@@ -623,6 +622,17 @@ function runSearch() {
         <div class="sh-deck">${esc(c.deck.replace(/::/g, ' › '))}</div></li>`).join('')
     : '<li class="search-count">Keine Karte gefunden. Tipp: weniger oder andere Wörter, z. B. „Plakette“ oder „§ 29“.</li>';
 }
+/** Suchleiste ein-/ausblenden (standardmäßig aus); beim Schließen wird die Suche geleert. */
+function toggleSearch(open = $('search').closest('.search-bar').hidden) {
+  const bar = $('search').closest('.search-bar');
+  if (open && $('view-decks').hidden) $('btn-back').click();
+  bar.hidden = !open;
+  $('btn-search').setAttribute('aria-expanded', open);
+  $('btn-search').classList.toggle('active', open);
+  if (open) $('search').focus();
+  else { $('search').value = ''; runSearch(); }
+}
+
 function openCardPreview(card) {
   const render = () => {
     dialog(card.deck.split('::').pop(), `<div class="card preview-card">${card.a.replace(/(src|href)="media\//g, `$1="content/${card.module}/media/`)}</div>
@@ -870,9 +880,12 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.1', date: '19.10.2026', items: [
+    'Suche aufgeräumt: standardmäßig ausgeblendet, über die Lupe oben öffnen; Treffer ab 3 Buchstaben.',
+  ] },
   { version: 'Web 0.8.0', date: '19.10.2026', items: [
     'Karten merken: beim Lernen oben auf ☆ tippen. Gemerkte Karten stehen als „★ Gemerkte Karten“ ganz oben in der Übersicht und lassen sich jederzeit wiederholen – auch auf verbundenen Geräten.',
-    'Karteikarten durchsuchen: Suchfeld oben in der Übersicht – findet Fragen und Antworten in allen Modulen, Treffer zeigen die ganze Karte.',
+    'Karteikarten durchsuchen: Lupe oben in der Kopfzeile – findet ab 3 Buchstaben Fragen und Antworten in allen Modulen, Treffer zeigen die ganze Karte.',
     'Beschriftungen beim Lernen: „⏸ Karte pausieren“ und „Fehler“.',
   ] },
   { version: 'Web 0.7.8', date: '19.10.2026', items: [
@@ -1464,7 +1477,8 @@ function bind() {
   $('btn-star').addEventListener('click', toggleStar);
   let searchTimer;
   $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 150); });
-  $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('search').value = ''; runSearch(); } });
+  $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleSearch(false); });
+  $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); toggleSearch(); });
   $('search-results').addEventListener('click', (e) => {
     const li = e.target.closest('[data-card]');
     const card = li && state.cards.find((c) => c.id === li.dataset.card);
@@ -1504,7 +1518,7 @@ function bind() {
     if (action === 'modules') openModules();
     if (action === 'paused') openPaused();
     if (action === 'starred') openStarred();
-    if (action === 'search') { if ($('view-decks').hidden) $('btn-back').click(); $('search').focus(); }
+    if (action === 'search') toggleSearch(true);
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
       $('stats-optin').addEventListener('change', (ev) => setStatsOptIn(ev.target.checked));

@@ -324,3 +324,4 @@ kbd { display: inline-block; border: 1px solid #c3c9d1; border-bottom-width: 2px
 .search-hit mark { background: #FFF3CD; color: inherit; padding: 0 1px; border-radius: 2px; }
 .preview-card { text-align: left; font-size: 16px; max-height: 60vh; overflow: auto; border: 1px solid #E3E6EA; border-radius: 8px; padding: 10px; }
 .preview-actions { display: flex; gap: 18px; margin: 10px 0 0; }
+#btn-search.active { background: #ffffff33; border-radius: 50%; }

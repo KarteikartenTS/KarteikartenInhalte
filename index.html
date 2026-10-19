@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="app.css?v=0.8.0">
+  <link rel="stylesheet" href="app.css?v=0.8.1">
 </head>
 <body>
   <div class="watermark" id="watermark" aria-hidden="true"></div>
@@ -25,6 +25,9 @@
       <h1 id="title">TÜV SÜD Akademie</h1>
       <div id="subtitle" class="subtitle"></div>
     </div>
+    <button class="icon-btn" id="btn-search" aria-label="Karteikarten durchsuchen" title="Karteikarten durchsuchen" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" fill="currentColor"/></svg>
+    </button>
     <button class="icon-btn sync-btn" id="btn-sync" aria-label="Geräte verbinden (Sync)" title="Geräte verbinden (Sync)">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.65 8.03l1.46 1.46A8 8 0 0 0 12 4zm0 14a6 6 0 0 1-5.65-8.03L4.89 8.51A8 8 0 0 0 12 20v3l4-4-4-4v3z"/></svg>
       <span class="sync-dot" aria-hidden="true"></span>
@@ -42,7 +45,7 @@
     <button data-action="modules">Module verwalten / freischalten</button>
     <button data-action="search">🔍 Karten durchsuchen</button>
     <button data-action="starred">★ Gemerkte Karten</button>
-    <button data-action="paused">Pausierte Karten</button>
+    <button data-action="paused">⏸ Pausierte Karten</button>
     <button data-action="sync">Geräte verbinden (Sync)</button>
     <button data-action="install" id="menu-install">Zum Home-Bildschirm hinzufügen</button>
     <button data-action="feedback">Feedback geben (Fehler oder Idee)</button>
@@ -52,7 +55,7 @@
   </div>
 
   <main id="view-decks" class="view">
-    <div class="search-bar"><input type="search" id="search" placeholder="Karteikarten durchsuchen …" aria-label="Karteikarten durchsuchen" autocomplete="off" enterkeyhint="search"></div>
+    <div class="search-bar" hidden><input type="search" id="search" placeholder="Karteikarten durchsuchen …" aria-label="Karteikarten durchsuchen" autocomplete="off" enterkeyhint="search"></div>
     <ul id="search-results" class="search-results" hidden></ul>
     <ul id="deck-list" class="deck-list"></ul>
     <div id="empty" class="empty" hidden>
@@ -174,6 +177,6 @@
       setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js?v=0.8.0"></script>
+  <script src="app.js?v=0.8.1"></script>
 </body>
 </html>
