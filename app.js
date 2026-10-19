@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.4';
+const APP_VERSION = 'Web 0.8.5';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -80,10 +80,11 @@ function daily() {
 const parentsOf = (deck) => deck.split('::').map((_, i, a) => a.slice(0, i + 1).join('::'));
 const isVirtual = (deck) => deck.endsWith('::' + NUM_KEY);
 const rootOf = (deck) => deck.split('::')[0];
-const deckLabel = (deck) => (isVirtual(deck) ? NUM_NAME : deck.split('::').pop());
+const deckLabel = (deck) => (deck === SEARCH_DECK ? `Suche: ${$('search').value.trim()}` : isVirtual(deck) ? NUM_NAME : deck.split('::').pop());
 /** Gehört die Karte zum Stapel? Beim Eintrag "Zahlen & Daten": alle getaggten Karten des Moduls. */
 const STAR_DECK = '★ Gemerkte Karten';
-const inDeck = (card, deck) => (deck === STAR_DECK ? isStarred(card) : isVirtual(deck)
+const SEARCH_DECK = '🔍 Suchtreffer';
+const inDeck = (card, deck) => (deck === SEARCH_DECK ? !!state.searchQueue?.includes(card.id) : deck === STAR_DECK ? isStarred(card) : isVirtual(deck)
   ? rootOf(card.deck) === rootOf(deck) && (card.tags || []).includes(NUM_TAG)
   : card.deck === deck || card.deck.startsWith(deck + '::'));
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
@@ -127,8 +128,14 @@ function starQueue() {
   return state.cards.filter((c) => isStarred(c) && !isPaused(c) && !state.starDone?.has(c.id));
 }
 
+// Lernen aus der Suche: die Treffer der Reihe nach, jede Karte einmal (unabhängig von der Fälligkeit)
+function searchQueueLeft() {
+  return (state.searchQueue || []).map((id) => state.cards.find((c) => c.id === id)).filter((c) => c && !isPaused(c) && !state.searchDone?.has(c.id));
+}
+
 function countsFor(deck, now = Date.now()) {
   if (deck === STAR_DECK) return { n: starQueue().length, l: 0, r: 0 };
+  if (deck === SEARCH_DECK) return { n: searchQueueLeft().length, l: 0, r: 0 };
   const t = today(now);
   let learn = 0, review = 0;
   for (const c of state.cards) {
@@ -142,6 +149,7 @@ function countsFor(deck, now = Date.now()) {
 
 function nextCard(deck, now = Date.now()) {
   if (deck === STAR_DECK) return starQueue()[0] || null;
+  if (deck === SEARCH_DECK) return searchQueueLeft()[0] || null;
   const t = today(now);
   const cards = state.cards.filter((c) => inDeck(c, deck) && !isPaused(c));
   const learning = cards.filter((c) => [1, 3].includes(progressOf(c).t)).sort((a, b) => progressOf(a).due - progressOf(b).due);
@@ -400,7 +408,8 @@ function nextInStudy() {
   if (!card) {
     const later = state.cards.filter((c) => inDeck(c, state.deck) && !isPaused(c) && [1, 3].includes(progressOf(c).t))
       .map((c) => progressOf(c).due).sort((a, b) => a - b)[0];
-    $('done-text').textContent = later && later - Date.now() < DAY_MS
+    $('done-text').textContent = state.deck === SEARCH_DECK ? 'Alle Suchtreffer durchgearbeitet. „Zur Übersicht“ bringt dich zurück zur Trefferliste.'
+      : later && later - Date.now() < DAY_MS
       ? `Einige Karten kommen in etwa ${Math.max(1, Math.round((later - Date.now()) / MIN))} Minuten wieder.`
       : 'In diesem Stapel ist gerade nichts fällig. Morgen geht es weiter!';
     $('subtitle').textContent = '';
@@ -440,6 +449,7 @@ function undoLast() {
   if (!h) return;
   if (h.prev) state.progress[h.card.id] = h.prev; else delete state.progress[h.card.id];
   state.starDone?.delete(h.card.id);
+  state.searchDone?.delete(h.card.id);
   state.daily = h.daily;
   const last = state.revlog[state.revlog.length - 1];
   if (last && last.id === h.card.id && last.t === h.t) state.revlog.pop();
@@ -480,6 +490,7 @@ function answer(ease) {
   const { p, wasNew } = schedule(card, ease);
   state.progress[card.id] = p;
   if (state.deck === STAR_DECK) state.starDone?.add(card.id);
+  if (state.deck === SEARCH_DECK) state.searchDone?.add(card.id);
   const d = daily();
   const decks = parentsOf(card.deck).concat(isVirtual(state.deck) ? [state.deck] : []);
   if (wasNew) for (const deck of decks) d.newSeen[deck] = (d.newSeen[deck] || 0) + 1;
@@ -644,8 +655,10 @@ function runSearch() {
   const chips = tagChips.length ? `<li class="tag-suggest">Kategorie: ${tagChips.map(([t, n]) => `<button class="tag-chip" data-tag="${esc(t)}">#${esc(t)} <small>${n}</small></button>`).join('')}</li>` : '';
   // Treffer in der Frage zuerst
   hits.sort((a, b) => words.every((w) => norm(plainText(b.q)).includes(w)) - words.every((w) => norm(plainText(a.q)).includes(w)));
+  state.lastHits = hits.map((c) => c.id); // Reihenfolge wie angezeigt (für „Zur Frage“)
   $('search-results').innerHTML = chips + (hits.length
-    ? `<li class="search-count">${hits.length} Treffer${tagMode ? ` mit Kategorie #${esc(q)}` : ''}${hits.length > 60 ? ' – die ersten 60' : ''}</li>` + hits.slice(0, 60).map((c) => `<li class="search-hit" data-card="${esc(c.id)}">
+    ? `<li class="search-count">${hits.length} Treffer${tagMode ? ` mit Kategorie #${esc(q)}` : ''}${hits.length > 60 ? ' – die ersten 60' : ''}
+        <button class="btn-link" id="study-hits">▶ Treffer lernen</button></li>` + hits.slice(0, 60).map((c) => `<li class="search-hit" data-card="${esc(c.id)}">
         <div class="sh-q">${isStarred(c) ? '<span class="sh-star">★</span> ' : ''}${isPaused(c) ? '<span class="sh-pause">⏸</span> ' : ''}${mark(textOf(c.q).slice(0, 160), words)}</div>
         <div class="sh-a">${mark(snippet(c, words), words)}</div>
         <div class="sh-deck">${esc(c.deck.replace(/::/g, ' › '))}${(c.tags || []).length ? ` · <span class="sh-tags">${c.tags.map((t) => `#${esc(t)}`).join(' ')}</span>` : ''}</div></li>`).join('')
@@ -662,12 +675,24 @@ function toggleSearch(open = $('search').closest('.search-bar').hidden) {
   else { $('search').value = ''; runSearch(); }
 }
 
+/** Aus der Suche lernen: ab der gewählten Karte durch die Treffer (Frage → Antwort → Bewertung). */
+function studyFromSearch(startId) {
+  const ids = state.lastHits || [];
+  const i = Math.max(0, ids.indexOf(startId));
+  state.searchQueue = startId ? [...ids.slice(i), ...ids.slice(0, i)] : [...ids];
+  state.searchDone = new Set();
+  state.deck = null;
+  $('dialog').hidden = true;
+  startStudy(SEARCH_DECK);
+}
+
 function openCardPreview(card) {
   const render = () => {
     dialog(card.deck.split('::').pop(), `<div class="card preview-card">${card.a.replace(/(src|href)="media\//g, `$1="content/${card.module}/media/`)}</div>
-      <p class="preview-actions"><button class="btn-link" id="pv-star">${isStarred(card) ? '★ Gemerkt' : '☆ Merken'}</button>
+      <p class="preview-actions"><button class="btn-primary" id="pv-learn">▶ Zur Frage</button><button class="btn-link" id="pv-star">${isStarred(card) ? '★ Gemerkt' : '☆ Merken'}</button>
         <button class="btn-link" id="pv-study">Kapitel lernen</button></p>`);
     $('pv-star').onclick = () => { setStar(card, !isStarred(card)); render(); runSearch(); };
+    $('pv-learn').onclick = () => studyFromSearch(card.id);
     $('pv-study').onclick = () => { $('dialog').hidden = true; $('search').value = ''; runSearch(); startStudy(card.deck); };
   };
   render();
@@ -909,6 +934,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.5', date: '20.10.2026', items: [
+    'Aus der Suche lernen: in der Kartenvorschau „▶ Zur Frage“ – Antwort aufdecken und bewerten, danach geht es mit den weiteren Treffern weiter. Oder über der Trefferliste „▶ Treffer lernen“.',
+  ] },
   { version: 'Web 0.8.4', date: '19.10.2026', items: [
     'Zurück-Taste in der Suche: schließt die Suche bzw. die Kartenvorschau, statt die App zu verlassen.',
   ] },
@@ -1518,6 +1546,7 @@ function bind() {
   $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleSearch(false); });
   $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); toggleSearch(); });
   $('search-results').addEventListener('click', (e) => {
+    if (e.target.closest('#study-hits')) { studyFromSearch(null); return; }
     const chip = e.target.closest('[data-tag]');
     if (chip) { $('search').value = `#${chip.dataset.tag}`; runSearch(); return; }
     const li = e.target.closest('[data-card]');
