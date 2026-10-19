@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="app.css?v=0.7.10">
+  <link rel="stylesheet" href="app.css?v=0.8.0">
 </head>
 <body>
   <div class="watermark" id="watermark" aria-hidden="true"></div>
@@ -40,6 +40,8 @@
     <button data-action="assistant">Lern-Assistent</button>
     <button data-action="stats">Statistik</button>
     <button data-action="modules">Module verwalten / freischalten</button>
+    <button data-action="search">🔍 Karten durchsuchen</button>
+    <button data-action="starred">★ Gemerkte Karten</button>
     <button data-action="paused">Pausierte Karten</button>
     <button data-action="sync">Geräte verbinden (Sync)</button>
     <button data-action="install" id="menu-install">Zum Home-Bildschirm hinzufügen</button>
@@ -50,6 +52,8 @@
   </div>
 
   <main id="view-decks" class="view">
+    <div class="search-bar"><input type="search" id="search" placeholder="Karteikarten durchsuchen …" aria-label="Karteikarten durchsuchen" autocomplete="off" enterkeyhint="search"></div>
+    <ul id="search-results" class="search-results" hidden></ul>
     <ul id="deck-list" class="deck-list"></ul>
     <div id="empty" class="empty" hidden>
       <img src="icons/icon-192.png" alt="" width="96" height="96">
@@ -62,6 +66,7 @@
 
   <main id="view-study" class="view" hidden>
     <div class="counts-bar"><span class="c-new" id="s-new">0</span><span class="c-learn" id="s-learn">0</span><span class="c-review" id="s-review">0</span>
+      <button class="star-btn" id="btn-star" aria-pressed="false" aria-label="Karte merken" title="Karte merken">☆</button>
       <button class="report-card" id="btn-pause-card" aria-label="Diese Karte pausieren (vom Lernen ausschließen)" title="Karte pausieren – kommt nicht mehr dran, bis du sie fortsetzt">⏸ Karte pausieren</button>
       <button class="report-card" id="btn-report-card" aria-label="Fehler mit dieser Karte melden">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 21V4h9l.4 2H20v10h-6.6l-.4-2H7v7z" fill="currentColor"/></svg>Fehler
@@ -169,6 +174,6 @@
       setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js?v=0.7.10"></script>
+  <script src="app.js?v=0.8.0"></script>
 </body>
 </html>

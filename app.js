@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.10';
+const APP_VERSION = 'Web 0.8.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -82,13 +82,16 @@ const isVirtual = (deck) => deck.endsWith('::' + NUM_KEY);
 const rootOf = (deck) => deck.split('::')[0];
 const deckLabel = (deck) => (isVirtual(deck) ? NUM_NAME : deck.split('::').pop());
 /** Gehört die Karte zum Stapel? Beim Eintrag "Zahlen & Daten": alle getaggten Karten des Moduls. */
-const inDeck = (card, deck) => (isVirtual(deck)
+const STAR_DECK = '★ Gemerkte Karten';
+const inDeck = (card, deck) => (deck === STAR_DECK ? isStarred(card) : isVirtual(deck)
   ? rootOf(card.deck) === rootOf(deck) && (card.tags || []).includes(NUM_TAG)
   : card.deck === deck || card.deck.startsWith(deck + '::'));
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
 // Pausiert = vom Lernen ausgeschlossen, bis man sie fortsetzt. Steht im Lernstand (p.pz = Zeitpunkt), damit der Sync
 // es mitnimmt. Achtung: p.s ist die Lernstufe – 0.7.7 hatte die Pause fälschlich dort abgelegt (siehe fixProgress).
 const isPaused = (card) => !!progressOf(card).pz;
+// Gemerkt (Stern): p.mk = Zeitpunkt, ebenfalls im Lernstand und damit im Sync
+const isStarred = (card) => !!progressOf(card).mk;
 /** 0.7.7-Fehler beheben: Pause-Zeitstempel aus p.s nach p.pz verschieben, Lernstufe zurück auf 0. */
 function fixProgress(progress) {
   let changed = false;
@@ -120,7 +123,12 @@ function newCardsFor(deck) {
   return out;
 }
 
+function starQueue() {
+  return state.cards.filter((c) => isStarred(c) && !isPaused(c) && !state.starDone?.has(c.id));
+}
+
 function countsFor(deck, now = Date.now()) {
+  if (deck === STAR_DECK) return { n: starQueue().length, l: 0, r: 0 };
   const t = today(now);
   let learn = 0, review = 0;
   for (const c of state.cards) {
@@ -133,6 +141,7 @@ function countsFor(deck, now = Date.now()) {
 }
 
 function nextCard(deck, now = Date.now()) {
+  if (deck === STAR_DECK) return starQueue()[0] || null;
   const t = today(now);
   const cards = state.cards.filter((c) => inDeck(c, deck) && !isPaused(c));
   const learning = cards.filter((c) => [1, 3].includes(progressOf(c).t)).sort((a, b) => progressOf(a).due - progressOf(b).due);
@@ -322,6 +331,16 @@ function renderDecks() {
   const list = $('deck-list');
   list.textContent = '';
   let due = 0;
+  const starred = state.cards.filter((c) => isStarred(c) && !isPaused(c)).length;
+  if (starred) {
+    const li = document.createElement('li');
+    li.className = 'deck star-deck';
+    li.style.setProperty('--level', 0);
+    li.innerHTML = `<span class="toggle none"></span><span class="name">${STAR_DECK}</span>
+      <span class="counts"><span class="c-total" title="Gemerkte Karten">${starred}</span></span>`;
+    li.addEventListener('click', () => { state.deck = null; startStudy(STAR_DECK); });
+    list.appendChild(li);
+  }
   for (const deck of decks) {
     const parts = deck.split('::');
     const level = parts.length - 1;
@@ -364,11 +383,14 @@ function renderDecks() {
     : '';
   const n = state.cards.length;
   $('total').textContent = n ? `${n.toLocaleString('de-DE')} Karteikarten geladen` : '';
+  $('search').closest('.search-bar').hidden = !n;
+  runSearch();
   show('view-decks');
 }
 
 function startStudy(deck) {
   if (state.deck !== deck) state.history = [];
+  if (deck === STAR_DECK && state.deck !== deck) state.starDone = new Set();
   state.deck = deck;
   $('title').textContent = deckLabel(deck);
   nextInStudy();
@@ -402,6 +424,7 @@ function showStudyCard(card) {
   renderCard(card.q, card);
   $('btn-show').hidden = false;
   $('ease-buttons').hidden = true;
+  updateStar();
   updateUndo();
   show('view-study');
 }
@@ -417,6 +440,7 @@ function undoLast() {
   const h = state.history?.pop();
   if (!h) return;
   if (h.prev) state.progress[h.card.id] = h.prev; else delete state.progress[h.card.id];
+  state.starDone?.delete(h.card.id);
   state.daily = h.daily;
   const last = state.revlog[state.revlog.length - 1];
   if (last && last.id === h.card.id && last.t === h.t) state.revlog.pop();
@@ -456,6 +480,7 @@ function answer(ease) {
     prev: state.progress[card.id] ? { ...state.progress[card.id] } : null, daily: JSON.parse(JSON.stringify(daily())) }].slice(-UNDO_MAX);
   const { p, wasNew } = schedule(card, ease);
   state.progress[card.id] = p;
+  if (state.deck === STAR_DECK) state.starDone?.add(card.id);
   const d = daily();
   const decks = parentsOf(card.deck).concat(isVirtual(state.deck) ? [state.deck] : []);
   if (wasNew) for (const deck of decks) d.newSeen[deck] = (d.newSeen[deck] || 0) + 1;
@@ -520,6 +545,95 @@ function openPaused() {
   };
   $('resume-all').onclick = () => { paused.forEach((c) => setPaused(c, false)); toast(`${paused.length} Karten fortgesetzt.`); openPaused(); renderDecksIfVisible(); };
 }
+// ---------- Karten merken (Stern) ----------
+function setStar(card, on) {
+  const p = { ...progressOf(card), last: Date.now() };
+  if (on) p.mk = Date.now(); else delete p.mk;
+  state.progress[card.id] = p;
+  save(KEY_PROGRESS, state.progress);
+}
+function updateStar() {
+  const on = !!state.current && isStarred(state.current);
+  const b = $('btn-star');
+  b.textContent = on ? '★' : '☆';
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', on);
+  b.title = on ? 'Gemerkt – nochmal tippen zum Entfernen' : 'Karte merken';
+}
+function toggleStar() {
+  const card = state.current;
+  if (!card) return;
+  const on = !isStarred(card);
+  setStar(card, on);
+  updateStar();
+  toast(on ? '★ Gemerkt – unter „Gemerkte Karten“ jederzeit wiederholen.' : 'Nicht mehr gemerkt.');
+}
+function openStarred() {
+  const starred = state.cards.filter(isStarred);
+  if (!starred.length) {
+    dialog('Gemerkte Karten', '<p>Noch keine Karte gemerkt.</p><p class="hint">Beim Lernen oben auf den <b>☆ Stern</b> tippen – die Karte landet hier und im Stapel „★ Gemerkte Karten“ in der Übersicht.</p>');
+    return;
+  }
+  const byDeck = new Map();
+  for (const c of starred) byDeck.set(c.deck, [...(byDeck.get(c.deck) || []), c]);
+  dialog(`Gemerkte Karten (${starred.length})`, `<p class="hint">Im Stapel „★ Gemerkte Karten“ gehst du alle einmal durch – egal, ob sie fällig sind.</p>
+    ${[...byDeck].map(([deck, cards]) => `<h3>${esc(deck.replace(/::/g, ' › '))}</h3><ul class="paused-list">${cards.map((c) => `<li>
+      <span>${esc(plainText(c.q).slice(0, 140))}</span><button class="btn-link" data-unstar="${esc(c.id)}">Entfernen</button></li>`).join('')}</ul>`).join('')}
+    <p><button class="btn-primary" id="star-study">Jetzt lernen</button></p>`);
+  $('dialog-text').onclick = (e) => {
+    const b = e.target.closest('[data-unstar]');
+    if (b) { const card = state.cards.find((c) => c.id === b.dataset.unstar); if (card) setStar(card, false); openStarred(); renderDecksIfVisible(); }
+  };
+  $('star-study').onclick = () => { $('dialog').hidden = true; state.deck = null; startStudy(STAR_DECK); };
+}
+
+// ---------- Karteikarten durchsuchen ----------
+const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
+// Text ohne HTML, Zeilenumbrüche/Absätze als Leerzeichen (sonst kleben Wörter zusammen)
+const textOf = (html) => plainText(String(html).replace(/<(br|\/p|\/div|\/li|\/tr|\/td|\/th|\/h\d)\b[^>]*>/gi, ' $&'));
+const searchText = (c) => (c._search ??= norm(`${textOf(c.q)} ${textOf(c.a)} ${(c.tags || []).join(' ')}`));
+function snippet(c, words) {
+  const text = textOf(c.a).replace(textOf(c.q), '').trim();
+  const n = norm(text);
+  const i = Math.max(0, Math.min(...words.map((w) => n.indexOf(w)).filter((x) => x >= 0)));
+  return (i > 40 ? '… ' : '') + text.slice(Math.max(0, i - 40), i + 110) + (text.length > i + 110 ? ' …' : '');
+}
+function mark(text, words) {
+  let out = esc(text);
+  for (const w of words) {
+    if (w.length < 2) continue;
+    out = out.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>');
+  }
+  return out;
+}
+function runSearch() {
+  const q = $('search').value.trim();
+  const active = q.length >= 2;
+  $('search-results').hidden = !active;
+  for (const id of ['deck-list', 'today', 'total']) $(id).hidden = active;
+  if (!active) return;
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  const hits = state.cards.filter((c) => words.every((w) => searchText(c).includes(w)));
+  // Treffer in der Frage zuerst
+  hits.sort((a, b) => words.every((w) => norm(plainText(b.q)).includes(w)) - words.every((w) => norm(plainText(a.q)).includes(w)));
+  $('search-results').innerHTML = hits.length
+    ? `<li class="search-count">${hits.length} Treffer${hits.length > 60 ? ' – die ersten 60' : ''}</li>` + hits.slice(0, 60).map((c) => `<li class="search-hit" data-card="${esc(c.id)}">
+        <div class="sh-q">${isStarred(c) ? '<span class="sh-star">★</span> ' : ''}${isPaused(c) ? '<span class="sh-pause">⏸</span> ' : ''}${mark(textOf(c.q).slice(0, 160), words)}</div>
+        <div class="sh-a">${mark(snippet(c, words), words)}</div>
+        <div class="sh-deck">${esc(c.deck.replace(/::/g, ' › '))}</div></li>`).join('')
+    : '<li class="search-count">Keine Karte gefunden. Tipp: weniger oder andere Wörter, z. B. „Plakette“ oder „§ 29“.</li>';
+}
+function openCardPreview(card) {
+  const render = () => {
+    dialog(card.deck.split('::').pop(), `<div class="card preview-card">${card.a.replace(/(src|href)="media\//g, `$1="content/${card.module}/media/`)}</div>
+      <p class="preview-actions"><button class="btn-link" id="pv-star">${isStarred(card) ? '★ Gemerkt' : '☆ Merken'}</button>
+        <button class="btn-link" id="pv-study">Kapitel lernen</button></p>`);
+    $('pv-star').onclick = () => { setStar(card, !isStarred(card)); render(); runSearch(); };
+    $('pv-study').onclick = () => { $('dialog').hidden = true; $('search').value = ''; runSearch(); startStudy(card.deck); };
+  };
+  render();
+}
+
 function renderDecksIfVisible() { if (!$('view-decks').hidden) renderDecks(); }
 
 function dialog(title, html) {
@@ -756,6 +870,11 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.0', date: '19.10.2026', items: [
+    'Karten merken: beim Lernen oben auf ☆ tippen. Gemerkte Karten stehen als „★ Gemerkte Karten“ ganz oben in der Übersicht und lassen sich jederzeit wiederholen – auch auf verbundenen Geräten.',
+    'Karteikarten durchsuchen: Suchfeld oben in der Übersicht – findet Fragen und Antworten in allen Modulen, Treffer zeigen die ganze Karte.',
+    'Beschriftungen beim Lernen: „⏸ Karte pausieren“ und „Fehler“.',
+  ] },
   { version: 'Web 0.7.8', date: '19.10.2026', items: [
     'Vorherige Karte: unten links mit ↶ (auf der Frageseite) die letzte Bewertung zurücknehmen und die Karte neu bewerten – auch nach „Geschafft“.',
     'Fehler behoben: Karten in der Lernphase wurden fälschlich als pausiert behandelt und kamen nicht dran. Sie sind wieder da.',
@@ -1342,6 +1461,15 @@ function bind() {
   $('btn-show').addEventListener('click', showAnswer);
   $('btn-report-card').addEventListener('click', () => openReport(state.current));
   $('btn-pause-card').addEventListener('click', pauseCurrent);
+  $('btn-star').addEventListener('click', toggleStar);
+  let searchTimer;
+  $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 150); });
+  $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('search').value = ''; runSearch(); } });
+  $('search-results').addEventListener('click', (e) => {
+    const li = e.target.closest('[data-card]');
+    const card = li && state.cards.find((c) => c.id === li.dataset.card);
+    if (card) openCardPreview(card);
+  });
   $('btn-undo').addEventListener('click', undoLast);
   $('btn-done-undo').addEventListener('click', undoLast);
   $('report-form').addEventListener('submit', sendReport);
@@ -1375,6 +1503,8 @@ function bind() {
     if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
     if (action === 'paused') openPaused();
+    if (action === 'starred') openStarred();
+    if (action === 'search') { if ($('view-decks').hidden) $('btn-back').click(); $('search').focus(); }
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
       $('stats-optin').addEventListener('change', (ev) => setStatsOptIn(ev.target.checked));

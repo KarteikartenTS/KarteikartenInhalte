@@ -2,7 +2,7 @@
 // Seite, app.js, app.css und Karten-JSON: zuerst Netz (mit Zeitlimit), sonst Cache – so passen Seite und Skript
 // immer zusammen (früher konnte eine neue Seite mit einem alten app.js aus dem Cache starten).
 // Bilder/Medien/Icons: zuerst Cache, sonst Netz.
-const CACHE = 'karteikarten-v28';
+const CACHE = 'karteikarten-v29';
 const KEEP = ['karteikarten-inhalt']; // Inhalts-Snapshot der App, nicht beim Update löschen
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/tuev-sued-logo.svg'];
 const NET_TIMEOUT = 5000;
