@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.4';
+const APP_VERSION = 'Web 0.7.5';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -668,6 +668,11 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.5', date: '19.10.2026', items: [
+    'Stabiler Start auf dem Smartphone: die App öffnet sofort mit deinem letzten Stand, auch bei schlechtem Netz – kein schwarzer Bildschirm mehr.',
+    'Die Zurück-Taste bleibt in der App: sie schließt Fenster bzw. führt zur Übersicht.',
+    'Zum Home-Bildschirm: erkennt alte Verknüpfungen und erklärt, wie du die App richtig installierst.',
+  ] },
   { version: 'Web 0.7.2', date: '17.10.2026', items: [
     'Sync-Knopf oben in der Kopfzeile: zeigt, ob deine Geräte verbunden sind, und öffnet „Geräte verbinden“.',
   ] },
@@ -731,8 +736,16 @@ function updateInstallMenu() { $('menu-install').hidden = isInstalled(); }
 
 const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3 8 7h3v8h2V7h3l-4-4zM6 10v10h12V10h-3V8h5v14H4V8h5v2H6z" fill="#007AFF"/></svg>';
 
+const isAndroid = () => /Android/i.test(navigator.userAgent);
+/** Android/Chrome: ist die App schon als echte App installiert (nicht nur als Lesezeichen-Verknüpfung)? */
+async function installedAsApp() {
+  try { return (await navigator.getInstalledRelatedApps?.() || []).some((a) => a.platform === 'webapp'); } catch { return false; }
+}
+
 async function installApp() {
   if (isInstalled()) { toast('Die App ist bereits auf deinem Home-Bildschirm.'); return; }
+  // Chrome bietet die Installation erst kurz nach dem Laden an – kurz darauf warten
+  for (let i = 0; !installPrompt && i < 15; i++) await new Promise((r) => setTimeout(r, 100));
   if (installPrompt) {
     // Chrome/Edge/Android: System-Dialog
     installPrompt.prompt();
@@ -754,6 +767,20 @@ async function installApp() {
         <p class="hint">Die Home-Bildschirm-App startet auf dem iPhone mit leerem Speicher. Öffne dort ⋮ → „Geräte verbinden“ und gib diesen Code ein:</p>
         ${code ? `<p class="sync-code">${esc(code)}</p>` : '<button class="btn-primary sync-wide" id="install-sync">Code für meinen Lernstand erzeugen</button>'}` : ''}`);
     if ($('install-sync')) $('install-sync').onclick = async () => { await connectSync(newSyncCode(), { create: true }); installApp(); };
+    return;
+  }
+  if (isAndroid()) {
+    const app = await installedAsApp();
+    dialog('Zum Startbildschirm', app ? `
+      <p><b>Die App ist auf diesem Gerät schon installiert.</b> Öffne sie über das Symbol „TÜV SÜD Akademie“ auf dem Startbildschirm –
+        dort läuft sie ohne Adressleiste und hält sich selbst aktuell.</p>` : `
+      <p>Chrome bietet die Installation gerade nicht direkt an. Meist liegt schon eine <b>ältere Verknüpfung</b> auf dem Startbildschirm
+        (kleines Chrome-Abzeichen, öffnet mit Adressleiste) – sie aktualisiert sich nicht.</p>
+      <ol class="steps">
+        <li>Alte Verknüpfung lange drücken → <b>Entfernen</b> (dein Lernstand bleibt im Browser erhalten).</li>
+        <li>Diese Seite in Chrome neu laden und hier erneut auf „Zum Home-Bildschirm hinzufügen“ tippen – dann kommt der Installations-Dialog.</li>
+        <li>Alternativ: Chrome-Menü ⋮ → <b>„App installieren“</b>.</li>
+      </ol>`);
     return;
   }
   dialog('Zum Home-Bildschirm', `
