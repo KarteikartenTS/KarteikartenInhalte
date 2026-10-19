@@ -286,3 +286,10 @@ button { font: inherit; cursor: pointer; }
 
 /* Tastenkürzel in Anleitungen */
 kbd { display: inline-block; border: 1px solid #c3c9d1; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 0.85em; font-family: inherit; }
+
+/* Karten pausieren */
+#btn-report-card { margin-left: 14px; }
+.toast-action { background: none; border: 0; color: #7FB2E5; font: inherit; font-weight: 700; padding: 0 0 0 8px; cursor: pointer; }
+.paused-list { list-style: none; padding: 0; margin: 4px 0 12px; }
+.paused-list li { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line, #E3E6EA); font-size: 14px; }
+.btn-link { background: none; border: 0; color: var(--blue, #005CA9); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; padding: 0; }

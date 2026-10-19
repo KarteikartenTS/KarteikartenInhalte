@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.6';
+const APP_VERSION = 'Web 0.7.7';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -86,6 +86,8 @@ const inDeck = (card, deck) => (isVirtual(deck)
   ? rootOf(card.deck) === rootOf(deck) && (card.tags || []).includes(NUM_TAG)
   : card.deck === deck || card.deck.startsWith(deck + '::'));
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
+// Pausiert = vom Lernen ausgeschlossen, bis man sie fortsetzt. Steht im Lernstand (p.s), damit der Sync es mitnimmt.
+const isPaused = (card) => !!progressOf(card).s;
 
 // Hauptordner (Modul) ohne eigenes Limit, es zählen nur die Limits der Kapitel
 function newLeft(deck) {
@@ -98,7 +100,7 @@ function newCardsFor(deck) {
   const left = { [deck]: newLeft(deck) };
   const out = [];
   for (const c of state.cards) {
-    if (!inDeck(c, deck) || progressOf(c).t !== 0) continue;
+    if (!inDeck(c, deck) || progressOf(c).t !== 0 || isPaused(c)) continue;
     if (left[deck] <= 0) break;
     // Limits aller Stapel zwischen [deck] und dem Kartenstapel
     const chain = isVirtual(deck) ? [deck] : parentsOf(c.deck).filter((d) => d === deck || d.startsWith(deck + '::'));
@@ -113,7 +115,7 @@ function countsFor(deck, now = Date.now()) {
   const t = today(now);
   let learn = 0, review = 0;
   for (const c of state.cards) {
-    if (!inDeck(c, deck)) continue;
+    if (!inDeck(c, deck) || isPaused(c)) continue;
     const p = progressOf(c);
     if ((p.t === 1 || p.t === 3) && today(p.due) <= t) learn++;
     else if (p.t === 2 && p.due <= t) review++;
@@ -123,7 +125,7 @@ function countsFor(deck, now = Date.now()) {
 
 function nextCard(deck, now = Date.now()) {
   const t = today(now);
-  const cards = state.cards.filter((c) => inDeck(c, deck));
+  const cards = state.cards.filter((c) => inDeck(c, deck) && !isPaused(c));
   const learning = cards.filter((c) => [1, 3].includes(progressOf(c).t)).sort((a, b) => progressOf(a).due - progressOf(b).due);
   if (learning.length && progressOf(learning[0]).due <= now) return learning[0];
   const reviews = cards.filter((c) => progressOf(c).t === 2 && progressOf(c).due <= t)
@@ -365,7 +367,7 @@ function startStudy(deck) {
 function nextInStudy() {
   const card = nextCard(state.deck);
   if (!card) {
-    const later = state.cards.filter((c) => inDeck(c, state.deck) && [1, 3].includes(progressOf(c).t))
+    const later = state.cards.filter((c) => inDeck(c, state.deck) && !isPaused(c) && [1, 3].includes(progressOf(c).t))
       .map((c) => progressOf(c).due).sort((a, b) => a - b)[0];
     $('done-text').textContent = later && later - Date.now() < DAY_MS
       ? `Einige Karten kommen in etwa ${Math.max(1, Math.round((later - Date.now()) / MIN))} Minuten wieder.`
@@ -426,13 +428,54 @@ function answer(ease) {
 
 // ---------- Kleinkram ----------
 let toastTimer;
-function toast(text) {
+function toast(text, action) {
   const t = $('toast');
   t.textContent = text;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.onclick = (e) => { e.stopPropagation(); t.hidden = true; action.run(); };
+    t.append(' ', b);
+  }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+  toastTimer = setTimeout(() => { t.hidden = true; }, action ? 6000 : 4000);
 }
+
+// ---------- Karten pausieren ----------
+function setPaused(card, on) {
+  const p = { ...progressOf(card), last: Date.now() };
+  if (on) p.s = Date.now(); else delete p.s;
+  state.progress[card.id] = p;
+  save(KEY_PROGRESS, state.progress);
+}
+function pauseCurrent() {
+  const card = state.current;
+  if (!card) return;
+  setPaused(card, true);
+  toast('Karte pausiert – sie kommt nicht mehr dran.', { label: 'Rückgängig', run: () => { setPaused(card, false); if (!$('view-study').hidden || !$('view-done').hidden) nextInStudy(); else renderDecksIfVisible(); } });
+  nextInStudy();
+}
+function openPaused() {
+  const paused = state.cards.filter(isPaused);
+  if (!paused.length) {
+    dialog('Pausierte Karten', '<p>Keine Karte pausiert.</p><p class="hint">Beim Lernen kannst du eine Karte mit ⏸ <b>„Pausieren“</b> vom Lernen ausschließen – z. B. wenn sie nicht zu deinem Lehrgang gehört. Hier holst du sie jederzeit zurück.</p>');
+    return;
+  }
+  const byDeck = new Map();
+  for (const c of paused) byDeck.set(c.deck, [...(byDeck.get(c.deck) || []), c]);
+  dialog(`Pausierte Karten (${paused.length})`, `<p class="hint">Diese Karten kommen beim Lernen nicht dran. Dein Lernstand bleibt erhalten.</p>
+    ${[...byDeck].map(([deck, cards]) => `<h3>${esc(deck.replace(/::/g, ' › '))}</h3><ul class="paused-list">${cards.map((c) => `<li>
+      <span>${esc(plainText(c.q).slice(0, 140))}</span><button class="btn-link" data-resume="${esc(c.id)}">Fortsetzen</button></li>`).join('')}</ul>`).join('')}
+    <p><button class="btn-primary" id="resume-all">Alle fortsetzen</button></p>`);
+  $('dialog-text').onclick = (e) => {
+    const b = e.target.closest('[data-resume]');
+    if (b) { const card = state.cards.find((c) => c.id === b.dataset.resume); if (card) setPaused(card, false); openPaused(); renderDecksIfVisible(); }
+  };
+  $('resume-all').onclick = () => { paused.forEach((c) => setPaused(c, false)); toast(`${paused.length} Karten fortgesetzt.`); openPaused(); renderDecksIfVisible(); };
+}
+function renderDecksIfVisible() { if (!$('view-decks').hidden) renderDecks(); }
 
 function dialog(title, html) {
   $('dialog-title').textContent = title;
@@ -668,6 +711,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.7', date: '19.10.2026', items: [
+    'Karten pausieren: beim Lernen mit ⏸ „Pausieren“ eine Karte vom Lernen ausschließen (mit Rückgängig). Menü ⋮ → „Pausierte Karten“ zeigt alle und holt sie zurück – auch über verbundene Geräte.',
+  ] },
   { version: 'Web 0.7.6', date: '19.10.2026', items: [
     'Zum Home-Bildschirm: passende Anleitung je Browser – Firefox bekommt eigene Hinweise statt der Chrome-Anleitung.',
   ] },
@@ -775,7 +821,7 @@ async function installApp() {
   }
   if (isIOS()) {
     const code = load(KEY_SYNC, null);
-    const learned = Object.keys(state.progress).length;
+    const learned = Object.values(state.progress).filter((p) => p.t > 0).length;
     dialog('Zum Home-Bildschirm', `
       <ol class="steps">
         <li>Tippe in Safari unten auf <b>Teilen</b> ${SHARE_ICON}</li>
@@ -1245,6 +1291,7 @@ function wiggle() {
 function bind() {
   $('btn-show').addEventListener('click', showAnswer);
   $('btn-report-card').addEventListener('click', () => openReport(state.current));
+  $('btn-pause-card').addEventListener('click', pauseCurrent);
   $('report-form').addEventListener('submit', sendReport);
   $('report-cancel').addEventListener('click', () => { $('report').hidden = true; });
   $('report-switch').addEventListener('click', (e) => {
@@ -1275,6 +1322,7 @@ function bind() {
     if (action === 'mine') openMine();
     if (action === 'news') showNews(true);
     if (action === 'modules') openModules();
+    if (action === 'paused') openPaused();
     if (action === 'about') {
       dialog('Über diese App', aboutHtml());
       $('stats-optin').addEventListener('change', (ev) => setStatsOptIn(ev.target.checked));
