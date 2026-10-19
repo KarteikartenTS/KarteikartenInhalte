@@ -283,3 +283,6 @@ button { font: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .karla, .figure, .karla.out { animation: none; }
 }
+
+/* Tastenkürzel in Anleitungen */
+kbd { display: inline-block; border: 1px solid #c3c9d1; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 0.85em; font-family: inherit; }

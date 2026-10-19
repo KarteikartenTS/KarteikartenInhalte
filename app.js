@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.5';
+const APP_VERSION = 'Web 0.7.6';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -668,6 +668,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.6', date: '19.10.2026', items: [
+    'Zum Home-Bildschirm: passende Anleitung je Browser – Firefox bekommt eigene Hinweise statt der Chrome-Anleitung.',
+  ] },
   { version: 'Web 0.7.5', date: '19.10.2026', items: [
     'Stabiler Start auf dem Smartphone: die App öffnet sofort mit deinem letzten Stand, auch bei schlechtem Netz – kein schwarzer Bildschirm mehr.',
     'Die Zurück-Taste bleibt in der App: sie schließt Fenster bzw. führt zur Übersicht.',
@@ -737,6 +740,11 @@ function updateInstallMenu() { $('menu-install').hidden = isInstalled(); }
 const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3 8 7h3v8h2V7h3l-4-4zM6 10v10h12V10h-3V8h5v14H4V8h5v2H6z" fill="#007AFF"/></svg>';
 
 const isAndroid = () => /Android/i.test(navigator.userAgent);
+// Fähigkeiten statt Browsername prüfen: Firefox meldet sich im Mobil-Modus teils als Android/Chrome
+const canPromptInstall = () => 'onbeforeinstallprompt' in window;           // nur Chromium (Chrome, Edge, Samsung …)
+const isFirefox = () => typeof InstallTrigger !== 'undefined' || /Firefox|FxiOS/i.test(navigator.userAgent)
+  || ('MozAppearance' in document.documentElement.style);
+const isTouchDevice = () => matchMedia('(pointer: coarse)').matches;
 /** Android/Chrome: ist die App schon als echte App installiert (nicht nur als Lesezeichen-Verknüpfung)? */
 async function installedAsApp() {
   try { return (await navigator.getInstalledRelatedApps?.() || []).some((a) => a.platform === 'webapp'); } catch { return false; }
@@ -745,13 +753,24 @@ async function installedAsApp() {
 async function installApp() {
   if (isInstalled()) { toast('Die App ist bereits auf deinem Home-Bildschirm.'); return; }
   // Chrome bietet die Installation erst kurz nach dem Laden an – kurz darauf warten
-  for (let i = 0; !installPrompt && i < 15; i++) await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; canPromptInstall() && !installPrompt && i < 15; i++) await new Promise((r) => setTimeout(r, 100));
   if (installPrompt) {
     // Chrome/Edge/Android: System-Dialog
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
     installPrompt = null;
     if (outcome !== 'accepted') toast('Kein Problem – du findest das jederzeit im Menü ⋮.');
+    return;
+  }
+  if (isFirefox() && !isIOS()) {
+    dialog('Zum Home-Bildschirm', isAndroid() && isTouchDevice() ? `
+      <p>In <b>Firefox für Android</b>:</p>
+      <ol class="steps"><li>Menü ⋮ (oben oder unten rechts) öffnen.</li>
+        <li><b>„Installieren“</b> bzw. <b>„Zum Startbildschirm hinzufügen“</b> wählen.</li></ol>` : `
+      <p><b>Firefox am Computer</b> kann Websites nicht als App installieren. Möglichkeiten:</p>
+      <ul class="steps"><li>Seite als <b>Lesezeichen</b> speichern (<kbd>Strg</kbd>+<kbd>D</kbd>).</li>
+        <li>Für eine App mit eigenem Fenster: die Seite in <b>Chrome</b> oder <b>Edge</b> öffnen und dort installieren.</li>
+        <li>Auf dem Smartphone: Seite dort öffnen und über das Browser-Menü zum Startbildschirm hinzufügen.</li></ul>`);
     return;
   }
   if (isIOS()) {
@@ -769,7 +788,7 @@ async function installApp() {
     if ($('install-sync')) $('install-sync').onclick = async () => { await connectSync(newSyncCode(), { create: true }); installApp(); };
     return;
   }
-  if (isAndroid()) {
+  if (isAndroid() && canPromptInstall()) {
     const app = await installedAsApp();
     dialog('Zum Startbildschirm', app ? `
       <p><b>Die App ist auf diesem Gerät schon installiert.</b> Öffne sie über das Symbol „TÜV SÜD Akademie“ auf dem Startbildschirm –
