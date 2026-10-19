@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.3';
+const APP_VERSION = 'Web 0.8.4';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -909,6 +909,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.4', date: '19.10.2026', items: [
+    'Zurück-Taste in der Suche: schließt die Suche bzw. die Kartenvorschau, statt die App zu verlassen.',
+  ] },
   { version: 'Web 0.8.3', date: '19.10.2026', items: [
     'Suche nach Kategorien (Tags): #kategorie eingeben oder einen der Vorschläge antippen – auch mit kleinem Tippfehler, z. B. „korregiert“ → #korrigiert.',
   ] },
@@ -1605,7 +1608,8 @@ async function refresh(manual) {
 // dann teils schwarz. Jetzt gilt: Solange eine Unteransicht oder ein Fenster offen ist, gibt es genau einen
 // History-Eintrag. "Zurück" schließt zuerst das Fenster bzw. führt zur Übersicht; erst dort verlässt man die App.
 let navIgnore = false;
-const innerOpen = () => $('view-decks').hidden || !$('dialog').hidden || !$('report').hidden || !$('menu').hidden;
+const searchOpen = () => !$('search').closest('.search-bar').hidden;
+const innerOpen = () => $('view-decks').hidden || !$('dialog').hidden || !$('report').hidden || !$('menu').hidden || searchOpen();
 function syncNav() {
   const inner = !!history.state?.kk;
   if (innerOpen() && !inner) history.pushState({ kk: 1 }, '');
@@ -1618,11 +1622,13 @@ function bindBackButton() {
     else if (!$('dialog').hidden) $('dialog').hidden = true;
     else if (!$('report').hidden) $('report').hidden = true;
     else if ($('view-decks').hidden) $('btn-back').click();
+    else if (searchOpen()) toggleSearch(false); // Suche schließen statt die App zu verlassen
     syncNav(); // noch etwas offen (z. B. Lernansicht unter dem Fenster) -> Eintrag wieder anlegen
   });
   // Jede Änderung an Ansichten/Fenstern hält die History passend – egal, welcher Button sie ausgelöst hat
   const watch = new MutationObserver(() => queueMicrotask(syncNav));
   for (const id of ['view-decks', 'dialog', 'report', 'menu']) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  watch.observe($('search').closest('.search-bar'), { attributes: true, attributeFilter: ['hidden'] });
   // Rückkehr aus dem Hintergrund bzw. aus dem Seiten-Cache: Übersicht neu zeichnen
   addEventListener('pageshow', (e) => { if (e.persisted && !$('view-decks').hidden) renderDecks(); });
 }
