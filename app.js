@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.9';
+const APP_VERSION = 'Web 0.7.10';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -505,7 +505,7 @@ function pauseCurrent() {
 function openPaused() {
   const paused = state.cards.filter(isPaused);
   if (!paused.length) {
-    dialog('Pausierte Karten', '<p>Keine Karte pausiert.</p><p class="hint">Beim Lernen kannst du eine Karte mit ⏸ <b>„Pausieren“</b> vom Lernen ausschließen – z. B. wenn sie nicht zu deinem Lehrgang gehört. Hier holst du sie jederzeit zurück.</p>');
+    dialog('Pausierte Karten', '<p>Keine Karte pausiert.</p><p class="hint">Beim Lernen kannst du eine Karte mit <b>„⏸ Karte pausieren“</b> vom Lernen ausschließen – z. B. wenn sie nicht zu deinem Lehrgang gehört. Hier holst du sie jederzeit zurück.</p>');
     return;
   }
   const byDeck = new Map();
