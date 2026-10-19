@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="app.css?v=0.7.7">
+  <link rel="stylesheet" href="app.css?v=0.7.8">
 </head>
 <body>
   <div class="watermark" id="watermark" aria-hidden="true"></div>
@@ -69,12 +69,17 @@
     </div>
     <div id="card-scroll" class="card-scroll"><div id="card" class="card"></div></div>
     <div class="answer-area">
+      <button id="btn-undo" class="undo-btn" hidden aria-label="Vorherige Karte (letzte Bewertung zurücknehmen)" title="Vorherige Karte">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62A7.95 7.95 0 0 1 12.5 10.5c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" fill="currentColor"/></svg>
+      </button>
+      <div class="answer-main">
       <button id="btn-show" class="btn-show">Antwort zeigen</button>
       <div id="ease-buttons" class="ease-buttons" hidden>
         <button data-ease="1" class="ease again"><small></small>Nochmal</button>
         <button data-ease="2" class="ease hard"><small></small>Schwer</button>
         <button data-ease="3" class="ease good"><small></small>Gut</button>
         <button data-ease="4" class="ease easy"><small></small>Einfach</button>
+      </div>
       </div>
     </div>
   </main>
@@ -87,6 +92,7 @@
     <h2>Geschafft für heute!</h2>
     <p id="done-text">In diesem Stapel ist gerade nichts fällig.</p>
     <button class="btn-primary" id="btn-done">Zur Übersicht</button>
+    <p><button class="btn-link-light" id="btn-done-undo" hidden>↶ Vorherige Karte</button></p>
   </main>
 
   <div id="dialog" class="dialog" hidden>
@@ -163,6 +169,6 @@
       setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js?v=0.7.7"></script>
+  <script src="app.js?v=0.7.8"></script>
 </body>
 </html>

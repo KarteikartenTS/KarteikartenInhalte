@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.7';
+const APP_VERSION = 'Web 0.7.8';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -86,8 +86,17 @@ const inDeck = (card, deck) => (isVirtual(deck)
   ? rootOf(card.deck) === rootOf(deck) && (card.tags || []).includes(NUM_TAG)
   : card.deck === deck || card.deck.startsWith(deck + '::'));
 const progressOf = (card) => state.progress[card.id] || { t: 0 };
-// Pausiert = vom Lernen ausgeschlossen, bis man sie fortsetzt. Steht im Lernstand (p.s), damit der Sync es mitnimmt.
-const isPaused = (card) => !!progressOf(card).s;
+// Pausiert = vom Lernen ausgeschlossen, bis man sie fortsetzt. Steht im Lernstand (p.pz = Zeitpunkt), damit der Sync
+// es mitnimmt. Achtung: p.s ist die Lernstufe – 0.7.7 hatte die Pause fälschlich dort abgelegt (siehe fixProgress).
+const isPaused = (card) => !!progressOf(card).pz;
+/** 0.7.7-Fehler beheben: Pause-Zeitstempel aus p.s nach p.pz verschieben, Lernstufe zurück auf 0. */
+function fixProgress(progress) {
+  let changed = false;
+  for (const p of Object.values(progress || {})) {
+    if (p && p.s > 1e9) { p.pz = p.s; p.s = 0; changed = true; }
+  }
+  return changed;
+}
 
 // Hauptordner (Modul) ohne eigenes Limit, es zählen nur die Limits der Kapitel
 function newLeft(deck) {
@@ -359,6 +368,7 @@ function renderDecks() {
 }
 
 function startStudy(deck) {
+  if (state.deck !== deck) state.history = [];
   state.deck = deck;
   $('title').textContent = deckLabel(deck);
   nextInStudy();
@@ -373,9 +383,15 @@ function nextInStudy() {
       ? `Einige Karten kommen in etwa ${Math.max(1, Math.round((later - Date.now()) / MIN))} Minuten wieder.`
       : 'In diesem Stapel ist gerade nichts fällig. Morgen geht es weiter!';
     $('subtitle').textContent = '';
+    updateUndo();
     show('view-done');
     return;
   }
+  showStudyCard(card);
+}
+
+/** Karte (Frageseite) in der Lernansicht anzeigen. */
+function showStudyCard(card) {
   state.current = card;
   state.shownAt = Date.now();
   const c = countsFor(state.deck);
@@ -386,7 +402,31 @@ function nextInStudy() {
   renderCard(card.q, card);
   $('btn-show').hidden = false;
   $('ease-buttons').hidden = true;
+  updateUndo();
   show('view-study');
+}
+
+// ---------- Vorherige Karte (letzte Bewertung zurücknehmen) ----------
+const UNDO_MAX = 30;
+function updateUndo() {
+  const has = !!state.history?.length;
+  $('btn-undo').hidden = !has;
+  $('btn-done-undo').hidden = !has;
+}
+function undoLast() {
+  const h = state.history?.pop();
+  if (!h) return;
+  if (h.prev) state.progress[h.card.id] = h.prev; else delete state.progress[h.card.id];
+  state.daily = h.daily;
+  const last = state.revlog[state.revlog.length - 1];
+  if (last && last.id === h.card.id && last.t === h.t) state.revlog.pop();
+  save(KEY_PROGRESS, state.progress);
+  save(KEY_DAILY, state.daily);
+  save(KEY_REVLOG, state.revlog);
+  state.deck = h.deck;
+  $('title').textContent = deckLabel(h.deck);
+  showStudyCard(h.card);
+  toast('Vorherige Karte – Bewertung zurückgenommen, du kannst sie neu bewerten.');
 }
 
 function renderCard(html, card) {
@@ -409,6 +449,10 @@ function showAnswer() {
 
 function answer(ease) {
   const card = state.current;
+  const t = Date.now();
+  // Zustand vor der Bewertung merken (für „vorherige Karte“)
+  state.history = [...(state.history || []), { deck: state.deck, card, t,
+    prev: state.progress[card.id] ? { ...state.progress[card.id] } : null, daily: JSON.parse(JSON.stringify(daily())) }].slice(-UNDO_MAX);
   const { p, wasNew } = schedule(card, ease);
   state.progress[card.id] = p;
   const d = daily();
@@ -418,7 +462,7 @@ function answer(ease) {
   d.studied++;
   d.seconds += seconds;
   // Lernprotokoll für die Statistik (begrenzt, damit der Speicher nicht vollläuft)
-  state.revlog.push({ t: Date.now(), d: today(), id: card.id, e: ease, s: Math.round(seconds), n: wasNew ? 1 : 0 });
+  state.revlog.push({ t, d: today(), id: card.id, e: ease, s: Math.round(seconds), n: wasNew ? 1 : 0 });
   if (state.revlog.length > 20000) state.revlog.splice(0, state.revlog.length - 20000);
   save(KEY_REVLOG, state.revlog);
   save(KEY_PROGRESS, state.progress);
@@ -446,7 +490,7 @@ function toast(text, action) {
 // ---------- Karten pausieren ----------
 function setPaused(card, on) {
   const p = { ...progressOf(card), last: Date.now() };
-  if (on) p.s = Date.now(); else delete p.s;
+  if (on) p.pz = Date.now(); else delete p.pz;
   state.progress[card.id] = p;
   save(KEY_PROGRESS, state.progress);
 }
@@ -711,6 +755,10 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.7.8', date: '19.10.2026', items: [
+    'Vorherige Karte: unten links mit ↶ die letzte Bewertung zurücknehmen und die Karte neu bewerten (auch nach „Geschafft“).',
+    'Fehler behoben: Karten in der Lernphase wurden fälschlich als pausiert behandelt und kamen nicht dran. Sie sind wieder da.',
+  ] },
   { version: 'Web 0.7.7', date: '19.10.2026', items: [
     'Karten pausieren: beim Lernen mit ⏸ „Pausieren“ eine Karte vom Lernen ausschließen (mit Rückgängig). Menü ⋮ → „Pausierte Karten“ zeigt alle und holt sie zurück – auch über verbundene Geräte.',
   ] },
@@ -927,6 +975,7 @@ function syncNow() {
       const merged = remote.data ? mergeSync(local, await decryptJson(key, remote.data)) : local;
       const changed = JSON.stringify(merged.progress) !== JSON.stringify(local.progress)
         || merged.codes.length !== local.codes.length;
+      fixProgress(merged.progress);
       state.progress = merged.progress;
       state.revlog = merged.revlog;
       save(KEY_PROGRESS, merged.progress);
@@ -1292,6 +1341,8 @@ function bind() {
   $('btn-show').addEventListener('click', showAnswer);
   $('btn-report-card').addEventListener('click', () => openReport(state.current));
   $('btn-pause-card').addEventListener('click', pauseCurrent);
+  $('btn-undo').addEventListener('click', undoLast);
+  $('btn-done-undo').addEventListener('click', undoLast);
   $('report-form').addEventListener('submit', sendReport);
   $('report-cancel').addEventListener('click', () => { $('report').hidden = true; });
   $('report-switch').addEventListener('click', (e) => {
@@ -1342,6 +1393,7 @@ function bind() {
   document.addEventListener('keydown', (e) => {
     // Tastenkürzel nur beim Lernen, nicht beim Tippen in Formularen
     if ($('view-study').hidden || !$('report').hidden || !$('dialog').hidden) return;
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && state.history?.length) { e.preventDefault(); undoLast(); return; }
     if (!$('btn-show').hidden && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); showAnswer(); }
     else if (!$('ease-buttons').hidden && ['1', '2', '3', '4'].includes(e.key)) answer(Number(e.key));
   });
@@ -1394,6 +1446,7 @@ function bindBackButton() {
 }
 
 async function main() {
+  if (fixProgress(state.progress)) save(KEY_PROGRESS, state.progress);
   bind();
   bindBackButton();
   updateInstallMenu();
