@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.3';
+const APP_VERSION = 'Web 0.7.4';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -182,14 +182,22 @@ function formatDelay(card, ease) {
 }
 
 // ---------- Inhalte ----------
+// Jede Anfrage mit Zeitlimit: hängende Mobilfunk-Verbindungen (z. B. nach Rückkehr aus dem Hintergrund)
+// dürfen den Start nicht blockieren
+function fetchT(url, opts = {}, ms = 8000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(t));
+}
+
 async function fetchJson(url) {
-  const r = await fetch(url, { cache: 'no-cache' });
+  const r = await fetchT(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.json();
 }
 
 async function postJson(path, body) {
-  const r = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetchT(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(data.fehler || `HTTP ${r.status}`), { status: r.status });
   return data;
@@ -254,18 +262,34 @@ async function loadContent() {
       console.warn('Modul nicht geladen', m.id, e);
     }
   }
-  state.allModules = all;
-  const hidden = load(KEY_HIDDEN, []);
-  const modules = all.filter((m) => !hidden.includes(m.id));
+  if (!all.length && state.allModules?.length) return changed; // offline und nichts Neues: Stand behalten
+  applyModules(all);
+  saveSnapshot(all);
+  const modules = state.modules;
   for (const data of modules) {
     if (versions[data.id] && versions[data.id] !== data.version) changed.push(data.title);
     versions[data.id] = data.version;
   }
   save(KEY_VERSIONS, versions);
   if (removed.length) setTimeout(() => toast(`Nicht mehr freigeschaltet: ${removed.join(', ')}`), 4200);
-  state.modules = modules;
-  state.cards = modules.flatMap((m) => m.cards.map((c, i) => ({ ...c, module: m.id, order: i })));
   return changed;
+}
+
+function applyModules(all) {
+  state.allModules = all;
+  const hidden = load(KEY_HIDDEN, []);
+  state.modules = all.filter((m) => !hidden.includes(m.id));
+  state.cards = state.modules.flatMap((m) => m.cards.map((c, i) => ({ ...c, module: m.id, order: i })));
+}
+
+// Letzter vollständiger Stand aller Module (Cache-Speicher, kein localStorage-Limit): Start sofort damit,
+// Aktualisierung aus dem Netz danach im Hintergrund
+const SNAP = 'karteikarten-inhalt';
+async function saveSnapshot(all) {
+  try { await (await caches.open(SNAP)).put('snapshot.json', new Response(JSON.stringify(all))); } catch (e) { console.warn('Snapshot', e); }
+}
+async function loadSnapshot() {
+  try { const r = await (await caches.open(SNAP)).match('snapshot.json'); return r ? await r.json() : null; } catch { return null; }
 }
 
 // ---------- Ansichten ----------
@@ -1284,8 +1308,12 @@ async function main() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  await refresh(false);
   window.__kkReady = true; // Start-Wächter in index.html: App läuft
+  // Sofort mit dem letzten Stand starten, dann aus dem Netz aktualisieren (mit Zeitlimit)
+  const snap = await loadSnapshot();
+  if (snap?.length) { applyModules(snap); renderDecks(); }
+  else $('deck-list').innerHTML = '<li class="deck loading">Karteikarten werden geladen …</li>';
+  await refresh(false);
   if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); }
   else showNews();
   checkMine();

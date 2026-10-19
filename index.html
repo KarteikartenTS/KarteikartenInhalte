@@ -154,16 +154,13 @@
     <button onclick="location.reload()" style="font-size:16px;padding:10px 18px;border:0;border-radius:8px;background:#005CA9;color:#fff">Neu laden</button></div>
   </div>
   <script>
-    // Start-Wächter: statt schwarzem/leerem Bildschirm nach 8 s einen "Neu laden"-Knopf zeigen
+    // Start-Wächter: statt schwarzem/leerem Bildschirm einen "Neu laden"-Knopf zeigen
     (function () {
+      // Greift nur, wenn app.js gar nicht startet (Laden der Karten zeigt die App selbst an)
       var show = function () { if (!window.__kkReady) document.getElementById('boot-fail').hidden = false; };
-      var t = setTimeout(show, 8000);
-      addEventListener('error', function () { clearTimeout(t); t = setTimeout(show, 1500); });
-      document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible' && !window.__kkReady) { clearTimeout(t); t = setTimeout(show, 4000); }
-      });
+      setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js"></script>
+  <script src="app.js?v=0.7.4"></script>
 </body>
 </html>
