@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.2';
+const APP_VERSION = 'Web 0.7.3';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -1248,8 +1248,36 @@ async function refresh(manual) {
   }
 }
 
+// ---------- Zurück-Taste (Smartphone/Browser) ----------
+// Ohne eigene History-Einträge verlässt "Zurück" mitten im Lernen die App; beim Zurückkehren blieb der Bildschirm
+// dann teils schwarz. Jetzt gilt: Solange eine Unteransicht oder ein Fenster offen ist, gibt es genau einen
+// History-Eintrag. "Zurück" schließt zuerst das Fenster bzw. führt zur Übersicht; erst dort verlässt man die App.
+let navIgnore = false;
+const innerOpen = () => $('view-decks').hidden || !$('dialog').hidden || !$('report').hidden || !$('menu').hidden;
+function syncNav() {
+  const inner = !!history.state?.kk;
+  if (innerOpen() && !inner) history.pushState({ kk: 1 }, '');
+  else if (!innerOpen() && inner) { navIgnore = true; history.back(); }
+}
+function bindBackButton() {
+  addEventListener('popstate', () => {
+    if (navIgnore) { navIgnore = false; return; }
+    if (!$('menu').hidden) $('menu').hidden = true;
+    else if (!$('dialog').hidden) $('dialog').hidden = true;
+    else if (!$('report').hidden) $('report').hidden = true;
+    else if ($('view-decks').hidden) $('btn-back').click();
+    syncNav(); // noch etwas offen (z. B. Lernansicht unter dem Fenster) -> Eintrag wieder anlegen
+  });
+  // Jede Änderung an Ansichten/Fenstern hält die History passend – egal, welcher Button sie ausgelöst hat
+  const watch = new MutationObserver(() => queueMicrotask(syncNav));
+  for (const id of ['view-decks', 'dialog', 'report', 'menu']) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  // Rückkehr aus dem Hintergrund bzw. aus dem Seiten-Cache: Übersicht neu zeichnen
+  addEventListener('pageshow', (e) => { if (e.persisted && !$('view-decks').hidden) renderDecks(); });
+}
+
 async function main() {
   bind();
+  bindBackButton();
   updateInstallMenu();
   updateSyncButton();
   $('btn-sync').addEventListener('click', (e) => { e.stopPropagation(); if (load(KEY_SYNC, null)) syncNow(); openSync(); });
@@ -1257,6 +1285,7 @@ async function main() {
   // Lernstand möglichst vor dem Aufräumen durch den Browser schützen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   await refresh(false);
+  window.__kkReady = true; // Start-Wächter in index.html: App läuft
   if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); }
   else showNews();
   checkMine();

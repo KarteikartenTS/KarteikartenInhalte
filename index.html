@@ -149,6 +149,21 @@
     </svg>
   </div>
 
+  <div id="boot-fail" hidden style="position:fixed;inset:0;display:grid;place-items:center;background:#fff;color:#1A1A1A;font-family:Arial,sans-serif;padding:24px;text-align:center;z-index:999">
+    <div><p><b>Die App hängt beim Start.</b><br>Meist hilft einmal neu laden – dein Lernstand bleibt erhalten.</p>
+    <button onclick="location.reload()" style="font-size:16px;padding:10px 18px;border:0;border-radius:8px;background:#005CA9;color:#fff">Neu laden</button></div>
+  </div>
+  <script>
+    // Start-Wächter: statt schwarzem/leerem Bildschirm nach 8 s einen "Neu laden"-Knopf zeigen
+    (function () {
+      var show = function () { if (!window.__kkReady) document.getElementById('boot-fail').hidden = false; };
+      var t = setTimeout(show, 8000);
+      addEventListener('error', function () { clearTimeout(t); t = setTimeout(show, 1500); });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && !window.__kkReady) { clearTimeout(t); t = setTimeout(show, 4000); }
+      });
+    })();
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
