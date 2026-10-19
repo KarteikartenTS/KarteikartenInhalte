@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.1';
+const APP_VERSION = 'Web 0.8.2';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -322,7 +322,7 @@ function show(view) {
 }
 
 function renderDecks() {
-  const real = [...new Set(state.cards.flatMap((c) => parentsOf(c.deck)))].sort((a, b) => a.localeCompare(b, 'de'));
+  const real = [...new Set(state.cards.flatMap((c) => parentsOf(c.deck)))].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
   // Je Modul den Eintrag "Zahlen & Daten" direkt unter dem Hauptordner einfügen
   const decks = real.flatMap((d) => {
     const v = `${d}::${NUM_KEY}`;
@@ -698,7 +698,7 @@ function renderStats() {
   const total = Math.max(1, recent.length);
 
   // Fortschritt je Kapitel (+ Zahlen & Daten)
-  const rows = [...new Set(state.cards.map((c) => c.deck))].sort((a, b) => a.localeCompare(b, 'de'));
+  const rows = [...new Set(state.cards.map((c) => c.deck))].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
   for (const root of new Set(rows.map(rootOf))) if (state.cards.some((c) => inDeck(c, `${root}::${NUM_KEY}`))) rows.unshift(`${root}::${NUM_KEY}`);
   const progressRows = rows.map((deck) => {
     const cards = state.cards.filter((c) => inDeck(c, deck));
@@ -880,6 +880,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.2', date: '19.10.2026', items: [
+    'Kapitel werden nach Nummer sortiert: Kap. 1, 2, 3 … 10, 11 (statt 1, 10, 11, 2 …).',
+  ] },
   { version: 'Web 0.8.1', date: '19.10.2026', items: [
     'Suche aufgeräumt: standardmäßig ausgeblendet, über die Lupe oben öffnen; Treffer ab 3 Buchstaben.',
   ] },
