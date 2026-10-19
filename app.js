@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.7.8';
+const APP_VERSION = 'Web 0.7.9';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -445,6 +445,7 @@ function showAnswer() {
   }
   $('btn-show').hidden = true;
   $('ease-buttons').hidden = false;
+  $('btn-undo').hidden = true; // bei der Bewertung nur die vier üblichen Knöpfe
 }
 
 function answer(ease) {
@@ -756,7 +757,7 @@ async function openMine() {
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
   { version: 'Web 0.7.8', date: '19.10.2026', items: [
-    'Vorherige Karte: unten links mit ↶ die letzte Bewertung zurücknehmen und die Karte neu bewerten (auch nach „Geschafft“).',
+    'Vorherige Karte: unten links mit ↶ (auf der Frageseite) die letzte Bewertung zurücknehmen und die Karte neu bewerten – auch nach „Geschafft“.',
     'Fehler behoben: Karten in der Lernphase wurden fälschlich als pausiert behandelt und kamen nicht dran. Sie sind wieder da.',
   ] },
   { version: 'Web 0.7.7', date: '19.10.2026', items: [
