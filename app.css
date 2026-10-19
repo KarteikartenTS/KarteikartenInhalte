@@ -325,3 +325,9 @@ kbd { display: inline-block; border: 1px solid #c3c9d1; border-bottom-width: 2px
 .preview-card { text-align: left; font-size: 16px; max-height: 60vh; overflow: auto; border: 1px solid #E3E6EA; border-radius: 8px; padding: 10px; }
 .preview-actions { display: flex; gap: 18px; margin: 10px 0 0; }
 #btn-search.active { background: #ffffff33; border-radius: 50%; }
+
+/* Kategorien in der Suche */
+.tag-suggest { padding: 6px 2px 2px; font-size: 13px; color: var(--muted, #5F6368); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-chip { border: 0; border-radius: 14px; padding: 4px 10px; background: var(--blue, #005CA9); color: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+.tag-chip small { opacity: .8; margin-left: 2px; }
+.sh-tags { color: var(--blue, #005CA9); }

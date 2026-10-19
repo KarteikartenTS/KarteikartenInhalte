@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.2';
+const APP_VERSION = 'Web 0.8.3';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -605,22 +605,51 @@ function mark(text, words) {
   }
   return out;
 }
+/** Tippfehler-tolerant: Editierdistanz (Levenshtein) mit Abbruch über max. */
+function editDistance(a, b, max = 2) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (Math.min(...cur) > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+const tagsOf = (c) => (c.tags || []).map((t) => norm(t));
+/** Kategorien, die zu einem Suchwort passen: enthalten es oder weichen höchstens 1–2 Buchstaben ab. */
+function matchingTags(word) {
+  const counts = new Map();
+  for (const c of state.cards) for (const t of c.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  const tol = word.length >= 8 ? 2 : word.length >= 4 ? 1 : 0;
+  return [...counts].filter(([t]) => { const n = norm(t); return n.includes(word) || editDistance(n, word, tol) <= tol; })
+    .sort((a, b) => b[1] - a[1]).slice(0, 6);
+}
+
 function runSearch() {
-  const q = $('search').value.trim();
+  const raw = $('search').value.trim();
+  const tagMode = raw.startsWith('#');
+  const q = raw.replace(/^#+/, '').trim();
   const active = q.length >= 3; // Treffer erst ab 3 Buchstaben
   $('search-results').hidden = !active;
   for (const id of ['deck-list', 'today', 'total']) $(id).hidden = active;
   if (!active) return;
   const words = norm(q).split(/\s+/).filter(Boolean);
-  const hits = state.cards.filter((c) => words.every((w) => searchText(c).includes(w)));
+  // #kategorie: nur Karten mit genau dieser Kategorie (Tippfehler werden über die Vorschläge korrigiert)
+  const hits = tagMode
+    ? state.cards.filter((c) => words.every((w) => tagsOf(c).includes(w)))
+    : state.cards.filter((c) => words.every((w) => searchText(c).includes(w)));
+  const tagChips = words.length === 1 ? matchingTags(words[0]).filter(([t]) => !(tagMode && norm(t) === words[0])) : [];
+  const chips = tagChips.length ? `<li class="tag-suggest">Kategorie: ${tagChips.map(([t, n]) => `<button class="tag-chip" data-tag="${esc(t)}">#${esc(t)} <small>${n}</small></button>`).join('')}</li>` : '';
   // Treffer in der Frage zuerst
   hits.sort((a, b) => words.every((w) => norm(plainText(b.q)).includes(w)) - words.every((w) => norm(plainText(a.q)).includes(w)));
-  $('search-results').innerHTML = hits.length
-    ? `<li class="search-count">${hits.length} Treffer${hits.length > 60 ? ' – die ersten 60' : ''}</li>` + hits.slice(0, 60).map((c) => `<li class="search-hit" data-card="${esc(c.id)}">
+  $('search-results').innerHTML = chips + (hits.length
+    ? `<li class="search-count">${hits.length} Treffer${tagMode ? ` mit Kategorie #${esc(q)}` : ''}${hits.length > 60 ? ' – die ersten 60' : ''}</li>` + hits.slice(0, 60).map((c) => `<li class="search-hit" data-card="${esc(c.id)}">
         <div class="sh-q">${isStarred(c) ? '<span class="sh-star">★</span> ' : ''}${isPaused(c) ? '<span class="sh-pause">⏸</span> ' : ''}${mark(textOf(c.q).slice(0, 160), words)}</div>
         <div class="sh-a">${mark(snippet(c, words), words)}</div>
-        <div class="sh-deck">${esc(c.deck.replace(/::/g, ' › '))}</div></li>`).join('')
-    : '<li class="search-count">Keine Karte gefunden. Tipp: weniger oder andere Wörter, z. B. „Plakette“ oder „§ 29“.</li>';
+        <div class="sh-deck">${esc(c.deck.replace(/::/g, ' › '))}${(c.tags || []).length ? ` · <span class="sh-tags">${c.tags.map((t) => `#${esc(t)}`).join(' ')}</span>` : ''}</div></li>`).join('')
+    : `<li class="search-count">Keine Karte gefunden.${tagChips.length ? ' Meintest du eine der Kategorien oben?' : ' Tipp: weniger oder andere Wörter, z. B. „Plakette“ oder „§ 29“, oder #kategorie.'}</li>`);
 }
 /** Suchleiste ein-/ausblenden (standardmäßig aus); beim Schließen wird die Suche geleert. */
 function toggleSearch(open = $('search').closest('.search-bar').hidden) {
@@ -880,6 +909,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.3', date: '19.10.2026', items: [
+    'Suche nach Kategorien (Tags): #kategorie eingeben oder einen der Vorschläge antippen – auch mit kleinem Tippfehler, z. B. „korregiert“ → #korrigiert.',
+  ] },
   { version: 'Web 0.8.2', date: '19.10.2026', items: [
     'Kapitel werden nach Nummer sortiert: Kap. 1, 2, 3 … 10, 11 (statt 1, 10, 11, 2 …).',
   ] },
@@ -1483,6 +1515,8 @@ function bind() {
   $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleSearch(false); });
   $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); toggleSearch(); });
   $('search-results').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-tag]');
+    if (chip) { $('search').value = `#${chip.dataset.tag}`; runSearch(); return; }
     const li = e.target.closest('[data-card]');
     const card = li && state.cards.find((c) => c.id === li.dataset.card);
     if (card) openCardPreview(card);

@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="app.css?v=0.8.2">
+  <link rel="stylesheet" href="app.css?v=0.8.3">
 </head>
 <body>
   <div class="watermark" id="watermark" aria-hidden="true"></div>
@@ -55,7 +55,7 @@
   </div>
 
   <main id="view-decks" class="view">
-    <div class="search-bar" hidden><input type="search" id="search" placeholder="Karteikarten durchsuchen …" aria-label="Karteikarten durchsuchen" autocomplete="off" enterkeyhint="search"></div>
+    <div class="search-bar" hidden><input type="search" id="search" placeholder="Karteikarten durchsuchen … (oder #kategorie)" aria-label="Karteikarten durchsuchen" autocomplete="off" enterkeyhint="search"></div>
     <ul id="search-results" class="search-results" hidden></ul>
     <ul id="deck-list" class="deck-list"></ul>
     <div id="empty" class="empty" hidden>
@@ -177,6 +177,6 @@
       setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js?v=0.8.2"></script>
+  <script src="app.js?v=0.8.3"></script>
 </body>
 </html>
