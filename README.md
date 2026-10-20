@@ -36,8 +36,8 @@ Die Web-App lädt sie beim Start von dort (`/api/modules`) und hält eine Kopie 
 | **Admin-Panel** auf [karteikarten-admin.pages.dev](https://karteikarten-admin.pages.dev) | Inhalte pflegen und freischalten (Zugang nur für Redaktion und Admin) |
 | **[KarteikartenMCP](https://github.com/KarteikartenTS/KarteikartenMCP)** | Karten mit Claude Code bearbeiten – Einrichtung mit einer Zeile |
 
-`content/` enthält nur noch einen **Rückfall-Stand** von PTI 1, falls der Server nicht erreichbar ist.
-Änderungen an Karten bitte ausschließlich im Admin-Panel bzw. über den MCP-Server vornehmen.
+Karten und Bilder werden **nicht** auf GitHub gespeichert. Änderungen an Karten ausschließlich im Admin-Panel
+bzw. über den MCP-Server vornehmen.
 
 ### Hinweise zur Web-App
 

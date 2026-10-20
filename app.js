@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.8';
+const APP_VERSION = 'Web 0.8.9';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -218,12 +218,6 @@ function fetchT(url, opts = {}, ms = 8000) {
   return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(t));
 }
 
-async function fetchJson(url) {
-  const r = await fetchT(url, { cache: 'no-cache' });
-  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
-  return r.json();
-}
-
 async function postJson(path, body) {
   const r = await fetchT(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
@@ -276,20 +270,9 @@ async function loadContent() {
   const versions = load(KEY_VERSIONS, {});
   const changed = [];
   const removed = [];
-  // Zuerst der Admin-Server (dort werden die Inhalte gepflegt) ...
+  // Inhalte kommen ausschließlich vom Admin-Server (Cloud); offline gilt der gespeicherte Stand
   const server = await loadServerModules(removed);
   const all = [...server.modules];
-  // ... GitHub nur für Module, die der Server nicht kennt bzw. als Rückfall, wenn er nicht erreichbar ist
-  const list = await fetchJson('content/modules.json').catch(() => ({ modules: [] }));
-  for (const m of list.modules) {
-    if (all.some((x) => x.id === m.id)) continue;
-    if (m.fallback && (server.reachable ? server.known.includes(m.id) : false)) continue;
-    try {
-      all.push(await fetchJson(`content/${m.id}/cards.json`));
-    } catch (e) {
-      console.warn('Modul nicht geladen', m.id, e);
-    }
-  }
   if (!all.length && state.allModules?.length) return changed; // offline und nichts Neues: Stand behalten
   applyModules(all);
   saveSnapshot(all);
@@ -464,7 +447,7 @@ function undoLast() {
 
 function renderCard(html, card) {
   // Medienpfade aus dem Export ("media/x") auf den Modulordner umbiegen
-  $('card').innerHTML = html.replace(/(src|href)="media\//g, `$1="content/${card.module}/media/`);
+  $('card').innerHTML = html.replace(/(src|href)="media\//g, `$1="${API_BASE}/media/${card.module}/`);
   $('card-scroll').scrollTop = 0;
 }
 
@@ -688,7 +671,7 @@ function studyFromSearch(startId) {
 
 function openCardPreview(card) {
   const render = () => {
-    dialog(card.deck.split('::').pop(), `<div class="card preview-card">${card.a.replace(/(src|href)="media\//g, `$1="content/${card.module}/media/`)}</div>
+    dialog(card.deck.split('::').pop(), `<div class="card preview-card">${card.a.replace(/(src|href)="media\//g, `$1="${API_BASE}/media/${card.module}/`)}</div>
       <p class="preview-actions"><button class="btn-primary" id="pv-learn">▶ Zur Frage</button><button class="btn-link" id="pv-star">${isStarred(card) ? '★ Gemerkt' : '☆ Merken'}</button>
         <button class="btn-link" id="pv-study">Kapitel lernen</button></p>`);
     $('pv-star').onclick = () => { setStar(card, !isStarred(card)); render(); runSearch(); };
@@ -934,6 +917,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.9', date: '20.10.2026', items: [
+    'Alle Karteikarten und Bilder kommen jetzt direkt vom Cloud-Server, auf dem sie gepflegt werden.',
+  ] },
   { version: 'Web 0.8.8', date: '20.10.2026', items: [
     'Mac mit Safari: eigene Anleitung „Zum Dock hinzufügen“ mit Skizze – die Karteikarten laufen dann als App im eigenen Fenster; Lernstand mit einem Klick mitnehmen.',
   ] },
