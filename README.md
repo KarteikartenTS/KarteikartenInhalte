@@ -2,7 +2,11 @@
 
 ## 👉 [karteikartents.github.io/KarteikartenInhalte](https://karteikartents.github.io/KarteikartenInhalte/)
 
-[![Video ansehen: Karteikarten der TÜV SÜD Akademie (1 Minute)](video/vorschau.jpg)](https://karteikartents.github.io/KarteikartenInhalte/video/karteikarten.mp4)
+
+
+https://github.com/user-attachments/assets/fe5740af-091b-4d81-b1ee-70ae8429fdad
+
+
 
 ▶ **[Video ansehen (1 Minute)](https://karteikartents.github.io/KarteikartenInhalte/video/karteikarten.mp4)**
 
