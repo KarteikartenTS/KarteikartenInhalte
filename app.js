@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.5';
+const APP_VERSION = 'Web 0.8.6';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -934,6 +934,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.6', date: '20.10.2026', items: [
+    'Zum Home-Bildschirm auf iPhone/iPad: passende Anleitung je iOS-Version und Browser, mit Symbolen und Skizze.',
+  ] },
   { version: 'Web 0.8.5', date: '20.10.2026', items: [
     'Aus der Suche lernen: in der Kartenvorschau „▶ Zur Frage“ – Antwort aufdecken und bewerten, danach geht es mit den weiteren Treffern weiter. Oder über der Trefferliste „▶ Treffer lernen“.',
   ] },
@@ -1030,6 +1033,49 @@ const isInstalled = () => matchMedia('(display-mode: standalone)').matches || na
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function updateInstallMenu() { $('menu-install').hidden = isInstalled(); }
 
+// Eigene, schlichte Symbole (keine Apple-Grafiken)
+const MORE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="vertical-align:-5px"><circle cx="12" cy="12" r="10.5" fill="none" stroke="#007AFF" stroke-width="1.6"/><circle cx="7.5" cy="12" r="1.5" fill="#007AFF"/><circle cx="12" cy="12" r="1.5" fill="#007AFF"/><circle cx="16.5" cy="12" r="1.5" fill="#007AFF"/></svg>';
+const ADD_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="#1A1A1A" stroke-width="1.8"/><path d="M12 7.5v9M7.5 12h9" stroke="#1A1A1A" stroke-width="1.8" stroke-linecap="round"/></svg>';
+/** Skizze des Teilen-Menüs mit hervorgehobener Zeile „Zum Home-Bildschirm“ (selbst gezeichnet). */
+const shareSheetSketch = (label) => `<svg viewBox="0 0 260 150" width="100%" style="max-width:300px;display:block;margin:6px auto" role="img" aria-label="Skizze: Teilen-Menü mit der Zeile ${label}">
+  <rect x="1" y="1" width="258" height="148" rx="14" fill="#F2F2F7" stroke="#C7C7CC"/>
+  <rect x="14" y="12" width="232" height="26" rx="8" fill="#fff"/><text x="26" y="29" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Kopieren</text>
+  <rect x="14" y="44" width="232" height="26" rx="8" fill="#fff"/><text x="26" y="61" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Zur Leseliste hinzufügen</text>
+  <rect x="12" y="76" width="236" height="30" rx="9" fill="#fff" stroke="#005CA9" stroke-width="2.5"/>
+  <text x="26" y="95" font-size="12" font-weight="700" fill="#1A1A1A" font-family="-apple-system,Arial">${label}</text>
+  <rect x="216" y="82" width="18" height="18" rx="4" fill="none" stroke="#1A1A1A" stroke-width="1.6"/><path d="M225 86v10M220 91h10" stroke="#1A1A1A" stroke-width="1.6" stroke-linecap="round"/>
+  <rect x="14" y="112" width="232" height="26" rx="8" fill="#fff"/><text x="26" y="129" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Aktionen bearbeiten …</text>
+</svg>`;
+const APPLE_GUIDE = 'https://support.apple.com/de-de/guide/iphone/iph42ab2f3a7/ios';
+/** iOS-Version (Safari meldet sie in „Version/26.0“, ältere Geräte in „OS 17_4“) und Browser bestimmen. */
+function iosInfo() {
+  const ua = navigator.userAgent;
+  const v = Number((/Version\/(\d+)/.exec(ua) || /OS (\d+)_/.exec(ua) || [])[1]) || 0;
+  const browser = /CriOS/.test(ua) ? 'Chrome' : /FxiOS/.test(ua) ? 'Firefox' : /EdgiOS/.test(ua) ? 'Edge' : 'Safari';
+  const iPad = !/iPhone/.test(ua) && (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  return { v, browser, iPad };
+}
+function iosInstallSteps() {
+  const { v, browser, iPad } = iosInfo();
+  const dev = iPad ? 'iPad' : 'iPhone';
+  const item = v >= 26 ? 'Zu Home-Bildschirm hinzufügen' : 'Zum Home-Bildschirm'; // Wortlaut je iOS-Version
+  let head, steps;
+  if (browser !== 'Safari') {
+    head = `${browser} auf dem ${dev}`;
+    steps = [`Tippe in der Adressleiste auf <b>Teilen</b> ${SHARE_ICON}.`, `Wähle <b>„${item}“</b> ${ADD_ICON} (ggf. nach unten scrollen).`, 'Tippe auf <b>„Hinzufügen“</b>.'];
+  } else if (v >= 26) {
+    head = `Safari, iOS ${v} (${dev})`;
+    steps = [`Tippe auf das Seitenmenü <b>„…“</b> ${MORE_ICON} und dann auf <b>„Teilen“</b> ${SHARE_ICON}.<br><small>Ist dein Tablayout „Unten“ oder „Oben“, tippe direkt auf Teilen.</small>`,
+      `Scrolle nach unten und tippe auf <b>„${item}“</b> ${ADD_ICON}.<br><small>Fehlt die Zeile: ganz unten „Aktionen bearbeiten“ und sie hinzufügen.</small>`,
+      '<b>„Als Web-App öffnen“</b> eingeschaltet lassen – dann startet die App ohne Adressleiste.', 'Tippe auf <b>„Hinzufügen“</b>.'];
+  } else {
+    head = `Safari${v ? `, iOS ${v}` : ''} (${dev})`;
+    steps = [`Tippe ${iPad ? 'oben rechts' : 'unten in der Leiste'} auf <b>Teilen</b> ${SHARE_ICON}.`,
+      `Scrolle nach unten und tippe auf <b>„${item}“</b> ${ADD_ICON}.`, 'Tippe oben rechts auf <b>„Hinzufügen“</b>.'];
+  }
+  return `<p class="hint">Anleitung für: <b>${esc(head)}</b></p><ol class="steps">${steps.map((x) => `<li>${x}</li>`).join('')}</ol>${shareSheetSketch(item)}
+    <p class="hint">Mehr dazu: <a href="${APPLE_GUIDE}" target="_blank" rel="noopener">Anleitung von Apple</a></p>`;
+}
 const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3 8 7h3v8h2V7h3l-4-4zM6 10v10h12V10h-3V8h5v14H4V8h5v2H6z" fill="#007AFF"/></svg>';
 
 const isAndroid = () => /Android/i.test(navigator.userAgent);
@@ -1069,12 +1115,7 @@ async function installApp() {
   if (isIOS()) {
     const code = load(KEY_SYNC, null);
     const learned = Object.values(state.progress).filter((p) => p.t > 0).length;
-    dialog('Zum Home-Bildschirm', `
-      <ol class="steps">
-        <li>Tippe in Safari unten auf <b>Teilen</b> ${SHARE_ICON}</li>
-        <li>Wähle <b>„Zum Home-Bildschirm“</b> (ggf. nach unten scrollen).</li>
-        <li>Tippe oben rechts auf <b>„Hinzufügen“</b>.</li>
-      </ol>
+    dialog('Zum Home-Bildschirm', `${iosInstallSteps()}
       ${learned ? `<h3>Deinen Lernstand mitnehmen</h3>
         <p class="hint">Die Home-Bildschirm-App startet auf dem iPhone mit leerem Speicher. Öffne dort ⋮ → „Geräte verbinden“ und gib diesen Code ein:</p>
         ${code ? `<p class="sync-code">${esc(code)}</p>` : '<button class="btn-primary sync-wide" id="install-sync">Code für meinen Lernstand erzeugen</button>'}` : ''}`);
