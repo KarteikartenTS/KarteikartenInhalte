@@ -6,6 +6,8 @@
 
 ▶ **[Video ansehen (1 Minute)](https://karteikartents.github.io/KarteikartenInhalte/video/karteikarten.mp4)**
 
+
+
 **Einfach den Link antippen.** Funktioniert direkt im Browser auf iPhone, iPad, Android, Mac und PC, ohne Anmeldung.
 
 | Gerät | So geht's |
