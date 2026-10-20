@@ -21,11 +21,12 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.9';
+const APP_VERSION = 'Web 0.9.0';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
 const KEY_DEVICE = 'tuev.device.v1';
+const KEY_STATS_MERGED = 'tuev.stats.merged.v1'; // gemeinsame Statistik-Kennung, unter der dieses Gerät schon zusammengeführt wurde
 const KEY_STATS_SENT = 'tuev.stats.sent.v1';
 const KEY_MINE = 'tuev.mine.v1';            // eigene Einsendungen: [{ token, type, kind, text, created }]
 const KEY_MINE_SEEN = 'tuev.mine.seen.v1';  // gelesene Antworten: { token: replied }
@@ -790,16 +791,25 @@ async function setStatsOptIn(on) {
     toast('Anonyme Nutzungsstatistik ist eingeschaltet.');
     return;
   }
-  const id = load(KEY_DEVICE, null);
+  const ids = [...new Set([load(KEY_DEVICE, null), load(KEY_SYNC, null) ? await statsId() : null].filter(Boolean))];
   try {
-    if (id) await fetch(`${API_BASE}/api/stats/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: id }) });
-    try { localStorage.removeItem(KEY_DEVICE); } catch {}
+    for (const id of ids) await fetch(`${API_BASE}/api/stats/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: id }) });
+    try { localStorage.removeItem(KEY_DEVICE); localStorage.removeItem(KEY_STATS_MERGED); } catch {}
     toast('Ausgeschaltet. Deine Daten auf dem Server wurden gelöscht.');
   } catch {
     toast('Ausgeschaltet. Löschen auf dem Server klappt beim nächsten Online-Sein.');
   }
 }
 /** Höchstens alle 5 Minuten: zusammengefasster Stand je Kapitel + Antworten heute. */
+/** Statistik-Kennung: per Sync verbundene Geräte (Browser + Home-Bildschirm-App) zählen als EIN Lernender.
+ *  Abgeleitet aus dem Sync-Code mit eigenem Präfix – der Server kann sie nicht mit dem Sync-Speicher verknüpfen. */
+async function statsId() {
+  const code = load(KEY_SYNC, null);
+  if (!code) return deviceId();
+  const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc(`karteikarten-stats-id:${normSync(code)}`)))]
+    .map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${'89ab'[parseInt(h[16], 16) & 3]}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
 async function sendStats(force = false) {
   if (!statsOptIn() || !state.cards.length) return;
   if (!force && Date.now() - load(KEY_STATS_SENT, 0) < 5 * MIN) return;
@@ -815,11 +825,15 @@ async function sendStats(force = false) {
   const d = new Date();
   const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   try {
+    const device = await statsId();
+    const own = load(KEY_DEVICE, null);
+    // Einmalig: die bisherige Einzelgeräte-Kennung auf dem Server in die gemeinsame überführen
+    const prev = own && own !== device && load(KEY_STATS_MERGED, null) !== device ? own : undefined;
     const r = await fetch(`${API_BASE}/api/stats`, {
       method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device: deviceId(), day, app: APP_VERSION, answersToday: state.revlog.filter((x) => x.d === today()).length, decks }),
+      body: JSON.stringify({ device, prev, day, app: APP_VERSION, answersToday: state.revlog.filter((x) => x.d === today()).length, decks }),
     });
-    if (r.ok) save(KEY_STATS_SENT, Date.now());
+    if (r.ok) { save(KEY_STATS_SENT, Date.now()); if (prev) save(KEY_STATS_MERGED, device); }
   } catch (e) {
     console.warn('Statistik nicht gesendet', e);
   }
@@ -917,6 +931,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.9.0', date: '20.10.2026', items: [
+    'Per „Geräte verbinden“ gekoppelte Geräte (z. B. Browser und Home-Bildschirm-App) zählen in der anonymen Statistik jetzt als ein Lernender.',
+  ] },
   { version: 'Web 0.8.9', date: '20.10.2026', items: [
     'Alle Karteikarten und Bilder kommen jetzt direkt vom Cloud-Server, auf dem sie gepflegt werden.',
   ] },
@@ -1542,7 +1559,7 @@ function aboutHtml() {
     <label class="optin"><input type="checkbox" id="stats-optin" ${statsOptIn() ? 'checked' : ''}>
       <span>Anonyme Nutzungsstatistik an die TÜV SÜD Akademie senden</span></label>
     <p class="hint">Gesendet werden nur zusammengefasste Werte: welche Module genutzt werden, wie viele Karten je Kapitel
-      begonnen bzw. gefestigt sind und wie viele Antworten pro Tag – mit einer zufälligen Geräte-ID, ohne Namen, ohne einzelne
+      begonnen bzw. gefestigt sind und wie viele Antworten pro Tag – mit einer zufälligen Kennung (per Sync verbundene Geräte teilen sich eine), ohne Namen, ohne einzelne
       Antworten. Ausgewertet wird nur in Gruppen ab 5 Lernenden. Ausschalten löscht deine Daten auf dem Server.</p>
   </div>`;
 }
