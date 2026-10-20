@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.7';
+const APP_VERSION = 'Web 0.8.8';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -934,6 +934,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.8', date: '20.10.2026', items: [
+    'Mac mit Safari: eigene Anleitung „Zum Dock hinzufügen“ mit Skizze – die Karteikarten laufen dann als App im eigenen Fenster; Lernstand mit einem Klick mitnehmen.',
+  ] },
   { version: 'Web 0.8.7', date: '20.10.2026', items: [
     'iPhone/iPad: Lernstand in die Home-Bildschirm-App mitnehmen ohne Code – in Safari „Lernstand mitnehmen“, in der App „Lernstand übernehmen“.',
   ] },
@@ -1034,7 +1037,14 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 window.addEventListener('appinstalled', () => { installPrompt = null; updateInstallMenu(); toast('Installiert – du findest die App jetzt auf deinem Home-Bildschirm.'); });
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-function updateInstallMenu() { $('menu-install').hidden = isInstalled(); }
+/** Safari am Mac (nicht iPad, nicht Chrome/Edge/Firefox): Web-App über „Zum Dock hinzufügen“ (ab Safari 17 / macOS Sonoma). */
+const isMacSafari = () => { const ua = navigator.userAgent; return !isIOS() && /Macintosh/.test(ua) && /Version\/\d+.*Safari\//.test(ua) && !/Chrome|Chromium|Edg|Firefox|OPR/.test(ua); };
+const isMac = () => !isIOS() && /Macintosh/.test(navigator.userAgent);
+const safariVersion = () => Number((/Version\/(\d+)/.exec(navigator.userAgent) || [])[1]) || 0;
+function updateInstallMenu() {
+  $('menu-install').hidden = isInstalled();
+  if (isMacSafari()) $('menu-install').textContent = 'Zum Dock hinzufügen';
+}
 
 // Eigene, schlichte Symbole (keine Apple-Grafiken)
 const MORE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="vertical-align:-5px"><circle cx="12" cy="12" r="10.5" fill="none" stroke="#007AFF" stroke-width="1.6"/><circle cx="7.5" cy="12" r="1.5" fill="#007AFF"/><circle cx="12" cy="12" r="1.5" fill="#007AFF"/><circle cx="16.5" cy="12" r="1.5" fill="#007AFF"/></svg>';
@@ -1050,6 +1060,34 @@ const shareSheetSketch = (label) => `<svg viewBox="0 0 260 150" width="100%" sty
   <rect x="14" y="112" width="232" height="26" rx="8" fill="#fff"/><text x="26" y="129" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Aktionen bearbeiten …</text>
 </svg>`;
 const APPLE_GUIDE = 'https://support.apple.com/de-de/guide/iphone/iph42ab2f3a7/ios';
+const APPLE_GUIDE_MAC = 'https://support.apple.com/de-de/104996';
+/** Skizze der Mac-Menüleiste: Menü „Ablage“ mit hervorgehobener Zeile „Zum Dock hinzufügen“ (selbst gezeichnet). */
+const macMenuSketch = () => `<svg viewBox="0 0 280 168" width="100%" style="max-width:320px;display:block;margin:6px auto" role="img" aria-label="Skizze: Menü Ablage mit der Zeile Zum Dock hinzufügen">
+  <rect x="1" y="1" width="278" height="24" rx="6" fill="#ECECEC" stroke="#C7C7CC"/>
+  <text x="14" y="17" font-size="11" font-weight="700" fill="#1A1A1A" font-family="-apple-system,Arial">Safari</text>
+  <rect x="54" y="4" width="44" height="18" rx="4" fill="#005CA9"/><text x="62" y="17" font-size="11" fill="#fff" font-family="-apple-system,Arial">Ablage</text>
+  <text x="108" y="17" font-size="11" fill="#1A1A1A" font-family="-apple-system,Arial">Bearbeiten</text>
+  <text x="172" y="17" font-size="11" fill="#1A1A1A" font-family="-apple-system,Arial">Darstellung</text>
+  <rect x="54" y="28" width="200" height="136" rx="8" fill="#F6F6F6" stroke="#C7C7CC"/>
+  <text x="68" y="48" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Neues Fenster</text>
+  <text x="68" y="68" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Neuer Tab</text>
+  <text x="68" y="88" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Öffnen …</text>
+  <rect x="60" y="96" width="188" height="24" rx="5" fill="#fff" stroke="#005CA9" stroke-width="2.5"/>
+  <text x="68" y="112" font-size="12" font-weight="700" fill="#1A1A1A" font-family="-apple-system,Arial">Zum Dock hinzufügen</text>
+  <text x="68" y="136" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Teilen</text>
+  <text x="68" y="155" font-size="11" fill="#8E8E93" font-family="-apple-system,Arial">Fenster schließen</text>
+</svg>`;
+function macInstallSteps() {
+  const v = safariVersion();
+  if (v && v < 17) return `<p class="hint">Anleitung für: <b>Safari ${v} am Mac</b></p>
+    <p>„Zum Dock hinzufügen“ gibt es erst ab <b>Safari 17</b> (macOS Sonoma 14). Aktualisiere macOS – oder lege die Seite als Lesezeichen an (<kbd>⌘</kbd>+<kbd>D</kbd>).</p>`;
+  return `<p class="hint">Anleitung für: <b>Safari${v ? ` ${v}` : ''} am Mac</b></p><ol class="steps">
+    <li>Oben in der Menüleiste <b>„Ablage“</b> öffnen.<br><small>Oder in der Symbolleiste auf <b>Teilen</b> ${SHARE_ICON} klicken.</small></li>
+    <li><b>„Zum Dock hinzufügen“</b> wählen.</li>
+    <li>Name und Symbol prüfen, dann <b>„Hinzufügen“</b> klicken.</li>
+    <li>Die App liegt jetzt im <b>Dock</b> und unter <b>Programme</b> und öffnet sich in einem eigenen Fenster ohne Adressleiste.</li></ol>${macMenuSketch()}
+    <p class="hint">Mehr dazu: <a href="${APPLE_GUIDE_MAC}" target="_blank" rel="noopener">Anleitung von Apple</a></p>`;
+}
 /** iOS-Version (Safari meldet sie in „Version/26.0“, ältere Geräte in „OS 17_4“) und Browser bestimmen. */
 function iosInfo() {
   const ua = navigator.userAgent;
@@ -1115,12 +1153,13 @@ async function installApp() {
         <li>Auf dem Smartphone: Seite dort öffnen und über das Browser-Menü zum Startbildschirm hinzufügen.</li></ul>`);
     return;
   }
-  if (isIOS()) {
-    const code = load(KEY_SYNC, null);
+  if (isIOS() || isMacSafari()) {
+    const mac = !isIOS();
     const learned = Object.values(state.progress).filter((p) => p.t > 0).length;
-    dialog('Zum Home-Bildschirm', `${iosInstallSteps()}
-      ${learned ? `<h3>Lernstand mitnehmen – vorher einmal tippen</h3>
-        <p class="hint">Die App auf dem Home-Bildschirm hat auf dem ${iosInfo().iPad ? 'iPad' : 'iPhone'} einen eigenen Speicher. Tippe <b>vor</b> dem Hinzufügen hier –
+    const where = mac ? 'im Dock' : 'auf dem Home-Bildschirm';
+    dialog(mac ? 'Zum Dock hinzufügen' : 'Zum Home-Bildschirm', `${mac ? macInstallSteps() : iosInstallSteps()}
+      ${learned && !(mac && safariVersion() && safariVersion() < 17) ? `<h3>Lernstand mitnehmen – vorher einmal ${mac ? 'klicken' : 'tippen'}</h3>
+        <p class="hint">Die App ${where} hat auf dem ${mac ? 'Mac' : iosInfo().iPad ? 'iPad' : 'iPhone'} einen eigenen Speicher. ${mac ? 'Klicke' : 'Tippe'} <b>vor</b> dem Hinzufügen hier –
           in der neuen App dann einfach auf „Lernstand übernehmen“. Kein Abtippen nötig.</p>
         <button class="btn-primary sync-wide" id="carry-progress">Lernstand mitnehmen</button>` : ''}`);
     if ($('carry-progress')) $('carry-progress').onclick = carryProgress;
@@ -1279,7 +1318,7 @@ async function carryProgress() {
     const { id } = await syncKeys(code);
     if (!(await postJson('/api/sync/get', { id })).data) throw new Error('Lernstand konnte nicht hochgeladen werden – bitte Internetverbindung prüfen.');
     await navigator.clipboard.writeText(syncLink(code));
-    b.textContent = '✓ Bereit – jetzt zum Home-Bildschirm hinzufügen';
+    b.textContent = isIOS() ? '✓ Bereit – jetzt zum Home-Bildschirm hinzufügen' : '✓ Bereit – jetzt zum Dock hinzufügen';
     toast('Lernstand bereit. In der neuen App auf „Lernstand übernehmen“ tippen.');
   } catch (e) {
     b.disabled = false; b.textContent = 'Lernstand mitnehmen';
@@ -1287,14 +1326,14 @@ async function carryProgress() {
   }
 }
 const syncCodeFrom = (text) => { const m = /sync=([A-Za-z0-9]{16})/.exec(text || '') || /\b([A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4})\b/.exec(String(text || '').toUpperCase()); return m ? m[1] : null; };
-/** Erster Start der Home-Bildschirm-App auf iOS mit leerem Speicher: Lernstand aus Safari anbieten. */
+/** Erster Start der Home-Bildschirm-App (iOS) bzw. Dock-App (Safari am Mac) mit leerem Speicher: Lernstand aus Safari anbieten. */
 function offerCarryOver() {
   const empty = !Object.values(state.progress).some((p) => p.t > 0);
-  if (!(isIOS() && isInstalled() && empty && !load(KEY_SYNC, null) && !load('tuev.carry.asked.v1', false))) return false;
+  if (!((isIOS() || isMac()) && isInstalled() && empty && !load(KEY_SYNC, null) && !load('tuev.carry.asked.v1', false))) return false;
   save('tuev.carry.asked.v1', true);
-  dialog('Willkommen in der App!', `<p>Hast du vorher schon in Safari gelernt? Dann hol dir deinen Lernstand mit einem Tipp hierher.</p>
+  dialog('Willkommen in der App!', `<p>Hast du vorher schon in Safari gelernt? Dann hol dir deinen Lernstand mit einem ${isIOS() ? 'Tipp' : 'Klick'} hierher.</p>
     <button class="btn-primary sync-wide" id="carry-take">Lernstand übernehmen</button>
-    <p class="hint">iOS fragt kurz, ob die App die Zwischenablage „einsetzen“ darf – einfach bestätigen.<br>Noch nichts gelernt? Dann einfach schließen und loslegen.</p>`);
+    <p class="hint">${isIOS() ? 'iOS' : 'Der Mac'} fragt kurz, ob die App die Zwischenablage „einsetzen“ darf – einfach bestätigen.<br>Noch nichts gelernt? Dann einfach schließen und loslegen.</p>`);
   $('carry-take').onclick = async () => {
     const b = $('carry-take'); b.disabled = true; b.textContent = 'Wird übernommen …';
     try {
