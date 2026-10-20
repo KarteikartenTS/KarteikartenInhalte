@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.8.6';
+const APP_VERSION = 'Web 0.8.7';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -934,6 +934,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.8.7', date: '20.10.2026', items: [
+    'iPhone/iPad: Lernstand in die Home-Bildschirm-App mitnehmen ohne Code – in Safari „Lernstand mitnehmen“, in der App „Lernstand übernehmen“.',
+  ] },
   { version: 'Web 0.8.6', date: '20.10.2026', items: [
     'Zum Home-Bildschirm auf iPhone/iPad: passende Anleitung je iOS-Version und Browser, mit Symbolen und Skizze.',
   ] },
@@ -1116,10 +1119,11 @@ async function installApp() {
     const code = load(KEY_SYNC, null);
     const learned = Object.values(state.progress).filter((p) => p.t > 0).length;
     dialog('Zum Home-Bildschirm', `${iosInstallSteps()}
-      ${learned ? `<h3>Deinen Lernstand mitnehmen</h3>
-        <p class="hint">Die Home-Bildschirm-App startet auf dem iPhone mit leerem Speicher. Öffne dort ⋮ → „Geräte verbinden“ und gib diesen Code ein:</p>
-        ${code ? `<p class="sync-code">${esc(code)}</p>` : '<button class="btn-primary sync-wide" id="install-sync">Code für meinen Lernstand erzeugen</button>'}` : ''}`);
-    if ($('install-sync')) $('install-sync').onclick = async () => { await connectSync(newSyncCode(), { create: true }); installApp(); };
+      ${learned ? `<h3>Lernstand mitnehmen – vorher einmal tippen</h3>
+        <p class="hint">Die App auf dem Home-Bildschirm hat auf dem ${iosInfo().iPad ? 'iPad' : 'iPhone'} einen eigenen Speicher. Tippe <b>vor</b> dem Hinzufügen hier –
+          in der neuen App dann einfach auf „Lernstand übernehmen“. Kein Abtippen nötig.</p>
+        <button class="btn-primary sync-wide" id="carry-progress">Lernstand mitnehmen</button>` : ''}`);
+    if ($('carry-progress')) $('carry-progress').onclick = carryProgress;
     return;
   }
   if (isAndroid() && canPromptInstall()) {
@@ -1262,6 +1266,48 @@ function loadQrLib() {
   });
 }
 const syncLink = (code) => `${location.origin}${location.pathname}#sync=${normSync(code)}`;
+
+// ---------- Lernstand in die Home-Bildschirm-App mitnehmen (iOS: getrennter Speicher) ----------
+/** In Safari: Sync still einrichten und den Link mit Schlüssel in die Zwischenablage legen. */
+async function carryProgress() {
+  const b = $('carry-progress');
+  b.disabled = true; b.textContent = 'Wird vorbereitet …';
+  try {
+    const code = load(KEY_SYNC, null) || await connectSync(newSyncCode(), { create: true });
+    await syncNow();
+    // nur „Bereit“ melden, wenn der Lernstand wirklich auf dem Server liegt
+    const { id } = await syncKeys(code);
+    if (!(await postJson('/api/sync/get', { id })).data) throw new Error('Lernstand konnte nicht hochgeladen werden – bitte Internetverbindung prüfen.');
+    await navigator.clipboard.writeText(syncLink(code));
+    b.textContent = '✓ Bereit – jetzt zum Home-Bildschirm hinzufügen';
+    toast('Lernstand bereit. In der neuen App auf „Lernstand übernehmen“ tippen.');
+  } catch (e) {
+    b.disabled = false; b.textContent = 'Lernstand mitnehmen';
+    toast(`Hat nicht geklappt: ${e.message}`);
+  }
+}
+const syncCodeFrom = (text) => { const m = /sync=([A-Za-z0-9]{16})/.exec(text || '') || /\b([A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4})\b/.exec(String(text || '').toUpperCase()); return m ? m[1] : null; };
+/** Erster Start der Home-Bildschirm-App auf iOS mit leerem Speicher: Lernstand aus Safari anbieten. */
+function offerCarryOver() {
+  const empty = !Object.values(state.progress).some((p) => p.t > 0);
+  if (!(isIOS() && isInstalled() && empty && !load(KEY_SYNC, null) && !load('tuev.carry.asked.v1', false))) return false;
+  save('tuev.carry.asked.v1', true);
+  dialog('Willkommen in der App!', `<p>Hast du vorher schon in Safari gelernt? Dann hol dir deinen Lernstand mit einem Tipp hierher.</p>
+    <button class="btn-primary sync-wide" id="carry-take">Lernstand übernehmen</button>
+    <p class="hint">iOS fragt kurz, ob die App die Zwischenablage „einsetzen“ darf – einfach bestätigen.<br>Noch nichts gelernt? Dann einfach schließen und loslegen.</p>`);
+  $('carry-take').onclick = async () => {
+    const b = $('carry-take'); b.disabled = true; b.textContent = 'Wird übernommen …';
+    try {
+      const code = syncCodeFrom(await navigator.clipboard.readText());
+      if (!code) throw new Error('In der Zwischenablage ist kein Lernstand. Tippe in Safari nochmal auf „Lernstand mitnehmen“ – oder nutze ⋮ → „Geräte verbinden“.');
+      await connectSync(code);
+      $('dialog').hidden = true;
+      await refresh(false); renderDecks();
+      toast('Lernstand übernommen – willkommen zurück!');
+    } catch (e) { b.disabled = false; b.textContent = 'Lernstand übernehmen'; toast(e.message); }
+  };
+  return true;
+}
 
 async function openSync() {
   const code = load(KEY_SYNC, null);
@@ -1719,7 +1765,8 @@ async function main() {
   if (snap?.length) { applyModules(snap); renderDecks(); }
   else $('deck-list').innerHTML = '<li class="deck loading">Karteikarten werden geladen …</li>';
   await refresh(false);
-  if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); }
+  if (offerCarryOver()) save(KEY_SEEN_VERSION, APP_VERSION);
+  else if (!load(KEY_TOUR, false) && state.cards.length) { karla(true); save(KEY_SEEN_VERSION, APP_VERSION); }
   else showNews();
   checkMine();
   sendStats();
