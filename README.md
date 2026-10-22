@@ -14,6 +14,8 @@ https://github.com/user-attachments/assets/fe5740af-091b-4d81-b1ee-70ae8429fdad
 
 **Einfach den Link antippen.** Funktioniert direkt im Browser auf iPhone, iPad, Android, Mac und PC, ohne Anmeldung.
 
+Eine eigene App der TÜV SÜD Akademie – die Wiederholungsplanung basiert auf dem bewährten **Anki-Lernalgorithmus** (verteilte Wiederholung).
+
 | Gerät | So geht's |
 |---|---|
 | 📱 **iPhone / iPad** | Link in **Safari** öffnen → **Teilen** → **„Zum Home-Bildschirm“**. Dann startet die Karteikarten wie eine eigene App. |

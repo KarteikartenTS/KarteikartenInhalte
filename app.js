@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.9.1';
+const APP_VERSION = 'Web 0.9.2';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -1018,6 +1018,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.9.2', date: '22.10.2026', items: [
+    '„Über diese App“ überarbeitet: eigene App der TÜV SÜD Akademie, Wiederholungsplanung nach dem Anki-Lernalgorithmus.',
+  ] },
   { version: 'Web 0.9.1', date: '22.10.2026', items: [
     'Module per QR-Code freischalten: mit der Handykamera scannen oder in der App unter 🔑 Module freischalten → 📷 QR-Code scannen.',
     'Menü mit Symbolen: 🔑 Module, 📊 Statistik, 👩‍🏫 Lern-Assistentin Karla.',
@@ -1626,11 +1629,11 @@ function aboutHtml() {
       <li>${LINK('https://www.tuvsud.com/de-de/store/akademie/datenschutzinformation', 'Datenschutzinformation der TÜV SÜD Akademie')}</li>
     </ul>
 
-    <h3>App und Inhalte</h3>
+    <h3>Die App</h3>
     <ul>
-      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid/releases/tag/v0.1.0-demo', 'Android-App herunterladen')}</li>
-      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenInhalte', 'Web-App und Karteikarten auf GitHub')}</li>
-      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenAndroid', 'Quellcode der Android-App auf GitHub')} (GPL-3.0, basiert auf AnkiDroid)</li>
+      <li>Eine eigene App der TÜV SÜD Akademie – läuft im Browser und als App auf dem Home-Bildschirm (iPhone, Android, Mac, PC).</li>
+      <li>Die Wiederholungsplanung basiert auf dem bewährten <b>Anki-Lernalgorithmus</b> (verteilte Wiederholung): Was du sicher kannst, kommt seltener, schwierige Karten öfter.</li>
+      <li>${LINK('https://github.com/KarteikartenTS/KarteikartenInhalte', 'Web-App auf GitHub')}</li>
     </ul>
 
     <h3>Fehler gefunden oder eine Idee?</h3>
