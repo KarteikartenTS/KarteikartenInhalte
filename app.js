@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.9.0';
+const APP_VERSION = 'Web 0.9.1';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -35,6 +35,7 @@ const WISH_KINDS = ['Neue Funktion', 'Neue Inhalte / weiteres Modul', 'Verbesser
 const KEY_SYNC = 'tuev.sync.v1';            // Sync-Code dieses Geräts (verbindet Geräte, Ende-zu-Ende-verschlüsselt)
 const KEY_SYNC_AT = 'tuev.sync.at.v1';
 const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+const JSQR_LIB = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'; // QR lesen, wo der Browser keinen BarcodeDetector hat (iPhone)
 const KEY_CODES = 'tuev.codes.v1';          // freigeschaltete Module: [{ code, module, title }]
 const KEY_HIDDEN = 'tuev.hidden.v1';        // vom Lernenden entfernte Module (Lernstand bleibt)
 const KEY_SERVER_CACHE = 'tuev.servercache.v1'; // Server-Module für den Offline-Betrieb
@@ -849,35 +850,30 @@ function openModules() {
     return `<li class="mod-row"><span><b>${esc(m.title)}</b><br><small class="muted">${m.cards.length} Karten${byCode ? ' · per Code freigeschaltet' : ''}${isHidden ? ' · entfernt' : ''}</small></span>
       ${isHidden ? `<button class="btn-secondary" data-mod-add="${esc(m.id)}">Hinzufügen</button>` : `<button class="btn-secondary" data-mod-remove="${esc(m.id)}">Entfernen</button>`}</li>`;
   }).join('');
-  dialog('Module verwalten', `
+  dialog('🔑 Module freischalten / verwalten', `
     <form id="unlock-form" class="unlock">
       <label for="unlock-code">Modul freischalten</label>
       <div class="unlock-row"><input id="unlock-code" autocomplete="off" autocapitalize="characters" placeholder="Code, z. B. MUEN-AB2C-XY3Z">
       <button class="btn-primary" type="submit">Freischalten</button></div>
+      <button type="button" class="btn-secondary sync-wide" id="unlock-scan">📷 QR-Code scannen</button>
       <p class="field-error" id="unlock-error" hidden></p>
       <p class="hint">Den Code bekommst du von der TÜV SÜD Akademie, z. B. zu deinem Lehrgang.</p>
     </form>
     <h3>Deine Module</h3>
     <ul class="mod-list">${rows || '<li class="muted">Noch keine Module.</li>'}</ul>
     <p class="hint">Entfernen blendet ein Modul aus. Dein Lernstand bleibt gespeichert und ist wieder da, wenn du es erneut hinzufügst.</p>`);
+  $('unlock-scan').onclick = () => scanQr();
   $('unlock-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const code = $('unlock-code').value.trim();
     if (!code) return;
     try {
-      const r = await postJson('/api/unlock', { code });
-      const list = load(KEY_CODES, []).filter((c) => c.module !== r.module.id);
-      list.push({ code: r.code, module: r.module.id, title: r.module.title });
-      save(KEY_CODES, list);
-      save(KEY_HIDDEN, load(KEY_HIDDEN, []).filter((id) => id !== r.module.id));
       $('dialog').hidden = true;
-      await refresh(false);
-      // Karla freut sich mit (statt kurzer Hinweis unten)
-      karlaUnlocked(r.module.id, r.module.title);
+      await unlockCode(code);
     } catch (err) {
-      // Server-Meldung zeigen (ungültig, abgelaufen oder Kontingent aufgebraucht)
-      $('unlock-error').textContent = err.status === 404 ? err.message : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
-      $('unlock-error').hidden = false;
+      openModules();
+      $('unlock-code').value = code;
+      showUnlockError(err);
     }
   });
   $('dialog-text').querySelectorAll('[data-mod-remove]').forEach((b) => b.addEventListener('click', async () => {
@@ -892,6 +888,97 @@ function openModules() {
     await refresh(false);
     openModules();
   }));
+}
+
+function showUnlockError(err) {
+  // Server-Meldung zeigen (ungültig, abgelaufen oder Kontingent aufgebraucht)
+  $('unlock-error').textContent = err.status === 404 ? err.message : 'Freischalten gerade nicht möglich. Bitte Internetverbindung prüfen.';
+  $('unlock-error').hidden = false;
+}
+/** Code am Server einlösen, Modul anzeigen; Karla freut sich mit. */
+async function unlockCode(code) {
+  const r = await postJson('/api/unlock', { code });
+  const list = load(KEY_CODES, []).filter((c) => c.module !== r.module.id);
+  list.push({ code: r.code, module: r.module.id, title: r.module.title });
+  save(KEY_CODES, list);
+  save(KEY_HIDDEN, load(KEY_HIDDEN, []).filter((id) => id !== r.module.id));
+  await refresh(false);
+  karlaUnlocked(r.module.id, r.module.title);
+  return r;
+}
+const codeLink = (code) => `${location.origin}${location.pathname}#code=${encodeURIComponent(code)}`;
+/** Universal-Link aus dem QR-Code (…#code=XXXX-XXXX-XXXX): Modul direkt freischalten. */
+async function acceptCodeLink() {
+  const m = /[#&]code=([A-Za-z0-9-]+)/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  const code = decodeURIComponent(m[1]).toUpperCase();
+  const norm = (c) => String(c).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const known = load(KEY_CODES, []).find((c) => norm(c.code) === norm(code));
+  if (known) { toast(`„${known.title}“ ist auf diesem Gerät schon freigeschaltet.`); return true; }
+  try { await unlockCode(code); } catch (err) { openModules(); $('unlock-code').value = code; showUnlockError(err); }
+  return true;
+}
+window.addEventListener('hashchange', async () => { if (!(await acceptCodeLink())) acceptSyncLink(); });
+
+// ---------- QR-Code scannen (Freischalt-Code oder Geräte-Sync) ----------
+let scanStream = null;
+function stopScan() { if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; } }
+new MutationObserver(() => { if ($('dialog').hidden) stopScan(); }).observe($('dialog'), { attributes: true, attributeFilter: ['hidden'] });
+function loadJsQr() {
+  if (window.jsQR) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = JSQR_LIB; s.onload = resolve; s.onerror = () => reject(new Error('Scanner konnte nicht geladen werden (offline?).'));
+    document.head.appendChild(s);
+  });
+}
+async function scanQr() {
+  if (!navigator.mediaDevices?.getUserMedia) { toast('Dieser Browser kann nicht auf die Kamera zugreifen. Code bitte eintippen oder mit der Kamera-App scannen.'); return; }
+  dialog('QR-Code scannen', `<div class="scan-box"><video id="scan-video" playsinline muted></video><div class="scan-frame"></div></div>
+    <p class="hint" id="scan-hint">Halte die Kamera auf den QR-Code für den Freischalt-Code oder den Geräte-Sync.</p>`);
+  const video = $('scan-video');
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+  } catch {
+    $('scan-hint').textContent = 'Kein Kamerazugriff. Bitte in den Browser-Einstellungen erlauben oder den Code eintippen.';
+    return;
+  }
+  video.srcObject = scanStream;
+  await video.play().catch(() => {});
+  let detect;
+  if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats?.() || []).includes('qr_code')) {
+    const bd = new window.BarcodeDetector({ formats: ['qr_code'] });
+    detect = async () => (await bd.detect(video))[0]?.rawValue;
+  } else {
+    try { await loadJsQr(); } catch (err) { $('scan-hint').textContent = err.message; return; }
+    const cv = document.createElement('canvas'); const ctx = cv.getContext('2d', { willReadFrequently: true });
+    detect = async () => {
+      if (!video.videoWidth) return null;
+      cv.width = video.videoWidth; cv.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      return window.jsQR(ctx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height)?.data;
+    };
+  }
+  while (scanStream) {
+    const text = await detect().catch(() => null);
+    if (text) { stopScan(); $('dialog').hidden = true; await handleScan(text); return; }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+async function handleScan(text) {
+  const t = String(text).trim();
+  const hash = t.includes('#') ? t.slice(t.indexOf('#')) : '';
+  if (/[#&]code=/.test(hash) || /[#&]sync=/.test(hash)) {
+    history.replaceState(null, '', location.pathname + location.search + hash);
+    if (!(await acceptCodeLink())) await acceptSyncLink();
+    return;
+  }
+  if (/^[A-Za-z0-9]{3,6}(-[A-Za-z0-9]{3,6}){1,3}$/.test(t)) {
+    try { await unlockCode(t); } catch (err) { openModules(); $('unlock-code').value = t; showUnlockError(err); }
+    return;
+  }
+  toast('Dieser QR-Code gehört nicht zu den Karteikarten.');
 }
 
 // ---------- Meine Rückmeldungen (Feedback-Schleife) ----------
@@ -931,6 +1018,10 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.9.1', date: '22.10.2026', items: [
+    'Module per QR-Code freischalten: mit der Handykamera scannen oder in der App unter 🔑 Module freischalten → 📷 QR-Code scannen.',
+    'Menü mit Symbolen: 🔑 Module, 📊 Statistik, 👩‍🏫 Lern-Assistentin Karla.',
+  ] },
   { version: 'Web 0.9.0', date: '20.10.2026', items: [
     'Per „Geräte verbinden“ gekoppelte Geräte (z. B. Browser und Home-Bildschirm-App) zählen in der anonymen Statistik jetzt als ein Lernender.',
   ] },
@@ -1575,7 +1666,7 @@ const TIPS = [
   ['Die Zahlen rechts', 'Blau sind neue Karten, Rot Karten in der Lernphase, Grün fällige Wiederholungen. Jeden Tag ein bisschen bringt am meisten.'],
   ['Wie eine echte App', 'Leg dir die App auf den Home-Bildschirm: Dann startet sie mit eigenem Symbol, im Vollbild und funktioniert auch offline.',
     { label: 'Zum Home-Bildschirm', run: () => installApp(), hideIf: () => isInstalled() }],
-  ['Kleiner Tipp', 'Dein Lernstand wird auf diesem Gerät gespeichert. Du findest mich jederzeit über ⋮ und „Lern-Assistent“. Viel Erfolg!'],
+  ['Kleiner Tipp', 'Dein Lernstand wird auf diesem Gerät gespeichert. Du findest mich jederzeit über ⋮ und „👩‍🏫 Lern-Assistentin Karla“. Viel Erfolg!'],
 ];
 let tip = 0;
 let tips = TIPS;   // aktuelle Sprechblasen: die Tour oder ein Ereignis (z. B. Modul freigeschaltet)
@@ -1653,7 +1744,7 @@ function karlaUnlocked(moduleId, title) {
     `„${title}“ ist jetzt in deiner Übersicht: ${cards.length} Karten${chapters > 1 ? ` in ${chapters} Kapiteln` : ''}. Tippe auf das Modul oder ein Kapitel und leg los.`,
   ]];
   if (numbers) list.push(['Mein Tipp für dich', `${numbers} Karten mit Grenzwerten, Fristen und Stichtagen übst du gezielt unter „123 Zahlen & Daten“ direkt unter dem Modul.`]);
-  list.push(['Gut zu wissen', 'Über ⋮ → „Module verwalten“ kannst du das Modul jederzeit ausblenden und wieder hinzufügen. Dein Lernstand bleibt erhalten. Viel Erfolg!']);
+  list.push(['Gut zu wissen', 'Über ⋮ → „🔑 Module freischalten / verwalten“ kannst du das Modul jederzeit ausblenden und wieder hinzufügen. Dein Lernstand bleibt erhalten. Viel Erfolg!']);
   karla(true, list, 'celebrate');
 }
 function wiggle() {
@@ -1812,7 +1903,8 @@ async function main() {
   else showNews();
   checkMine();
   sendStats();
-  // Sync-Link aus dem QR-Code (…#sync=CODE) übernehmen, sonst normal abgleichen
+  // Freischalt-Link (…#code=…) bzw. Sync-Link (…#sync=…) aus einem QR-Code übernehmen, sonst normal abgleichen
+  await acceptCodeLink();
   if (!(await acceptSyncLink())) syncNow();
 }
 
