@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="app.css?v=0.9.2">
+  <link rel="stylesheet" href="app.css?v=0.9.3">
 </head>
 <body>
   <div class="watermark" id="watermark" aria-hidden="true"></div>
@@ -71,6 +71,7 @@
     <div class="counts-bar"><span class="c-new" id="s-new">0</span><span class="c-learn" id="s-learn">0</span><span class="c-review" id="s-review">0</span>
       <button class="star-btn" id="btn-star" aria-pressed="false" aria-label="Karte merken" title="Karte merken">☆</button>
       <button class="report-card" id="btn-pause-card" aria-label="Diese Karte pausieren (vom Lernen ausschließen)" title="Karte pausieren – kommt nicht mehr dran, bis du sie fortsetzt">⏸ Karte pausieren</button>
+      <button class="report-card ask-card" id="btn-ask-card" aria-label="Frage zu dieser Karte stellen" title="Frage zu dieser Karte stellen"><span class="ask-icon" aria-hidden="true">?</span>Frage</button>
       <button class="report-card" id="btn-report-card" aria-label="Fehler mit dieser Karte melden">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 21V4h9l.4 2H20v10h-6.6l-.4-2H7v7z" fill="currentColor"/></svg>Fehler
       </button>
@@ -115,11 +116,12 @@
     <form class="dialog-box report-box" id="report-form" novalidate>
       <h2 id="report-title">Feedback geben</h2>
       <div class="segmented" id="report-switch" role="radiogroup" aria-label="Art der Rückmeldung">
-        <button type="button" data-type="fehler" role="radio">Fehler melden</button>
-        <button type="button" data-type="wunsch" role="radio">Idee vorschlagen</button>
+        <button type="button" data-type="fehler" role="radio">⚑ Fehler</button>
+        <button type="button" data-type="frage" role="radio">? Frage</button>
+        <button type="button" data-type="wunsch" role="radio">Idee</button>
       </div>
       <div id="report-card-info" class="report-card-info" hidden></div>
-      <label for="report-kind">Art des Fehlers</label>
+      <label for="report-kind" id="report-kind-label">Art des Fehlers</label>
       <select id="report-kind"></select>
       <label for="report-text" id="report-text-label">Was ist falsch? <span class="req">*</span></label>
       <textarea id="report-text" rows="4" placeholder="z. B. Der Grenzwert ist seit 2021 ein anderer: …"></textarea>
@@ -177,6 +179,6 @@
       setTimeout(show, 10000);
     })();
   </script>
-  <script src="app.js?v=0.9.2"></script>
+  <script src="app.js?v=0.9.3"></script>
 </body>
 </html>

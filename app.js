@@ -21,7 +21,7 @@ const KEY_COLLAPSED = 'tuev.collapsed.v1';
 const KEY_TOUR = 'tuev.tour.v1';
 const KEY_REVLOG = 'tuev.revlog.v1';
 
-const APP_VERSION = 'Web 0.9.2';
+const APP_VERSION = 'Web 0.9.3';
 // Admin-Panel (Meldungen, anonyme Statistik). Lokal: Wrangler-Dev-Server.
 const API_BASE = location.hostname === 'localhost' ? 'http://localhost:8788' : 'https://karteikarten-admin.pages.dev';
 const KEY_STATS_OPT = 'tuev.stats.optin.v1';
@@ -32,6 +32,7 @@ const KEY_MINE = 'tuev.mine.v1';            // eigene Einsendungen: [{ token, ty
 const KEY_MINE_SEEN = 'tuev.mine.seen.v1';  // gelesene Antworten: { token: replied }
 const KEY_SEEN_VERSION = 'tuev.seenversion.v1';
 const WISH_KINDS = ['Neue Funktion', 'Neue Inhalte / weiteres Modul', 'Verbesserung', 'Sonstiges'];
+const QUESTION_KINDS = ['Verständnisfrage', 'Frage zur Rechtslage', 'Frage zur Prüfung', 'Sonstiges'];
 const KEY_SYNC = 'tuev.sync.v1';            // Sync-Code dieses Geräts (verbindet Geräte, Ende-zu-Ende-verschlüsselt)
 const KEY_SYNC_AT = 'tuev.sync.at.v1';
 const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
@@ -1002,7 +1003,7 @@ async function openMine() {
     const r = mineCache.find((x) => x.token === m.token) || {};
     const isNew = r.replied && seen[m.token] !== r.replied;
     return `<li class="mine-row">
-      <div class="mine-head"><b>${m.type === 'wunsch' ? 'Idee' : 'Fehler'}: ${esc(m.kind)}</b><span class="status-pill s-${esc(r.status || 'offen')}">${esc(STATUS_TEXT[r.status] || 'gesendet')}</span></div>
+      <div class="mine-head"><b>${m.type === 'wunsch' ? 'Idee' : m.type === 'frage' ? 'Frage' : 'Fehler'}: ${esc(m.kind)}</b><span class="status-pill s-${esc(r.status || 'offen')}">${esc(STATUS_TEXT[r.status] || 'gesendet')}</span></div>
       <small class="muted">${new Date(m.created).toLocaleDateString('de-DE')} · ${esc(m.text)}</small>
       ${r.reply ? `<div class="mine-reply ${isNew ? 'new' : ''}"><b>Antwort der Akademie${isNew ? ' (neu)' : ''}:</b><br>${esc(r.reply)}</div>` : ''}
     </li>`;
@@ -1018,6 +1019,9 @@ async function openMine() {
 
 // ---------- Was ist neu? ----------
 const CHANGELOG = [
+  { version: 'Web 0.9.3', date: '22.10.2026', items: [
+    'Neu: „? Frage“ beim Lernen – stell eine Frage direkt zur Karte. Die Antwort kommt unter ⋮ → „Meine Rückmeldungen“.',
+  ] },
   { version: 'Web 0.9.2', date: '22.10.2026', items: [
     '„Über diese App“ überarbeitet: eigene App der TÜV SÜD Akademie, Wiederholungsplanung nach dem Anki-Lernalgorithmus.',
   ] },
@@ -1526,24 +1530,31 @@ function openReport(card, type = 'fehler') {
   reportCard = card;
   reportType = type;
   const wish = type === 'wunsch';
-  $('report-title').textContent = card ? 'Fehler mit dieser Karte melden' : 'Feedback geben';
-  // Umschalter Fehler/Idee nur beim allgemeinen Feedback (nicht bei einer konkreten Karte)
-  $('report-switch').hidden = !!card;
-  for (const b of $('report-switch').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.type === type));
-  $('report-text-label').firstChild.textContent = wish ? 'Was wünschst du dir? ' : 'Was ist falsch? ';
-  $('report-text').placeholder = wish ? 'z. B. Ein Modul zu Bremsen wäre super, weil …' : 'z. B. Der Grenzwert ist seit 2021 ein anderer: …';
+  const ask = type === 'frage';
+  $('report-title').textContent = card ? (ask ? 'Frage zu dieser Karte' : 'Fehler mit dieser Karte melden') : (ask ? 'Frage stellen' : 'Feedback geben');
+  // Umschalter: an einer Karte Fehler/Frage, allgemein zusätzlich Idee
+  $('report-switch').hidden = false;
+  for (const b of $('report-switch').querySelectorAll('button')) {
+    b.hidden = !!card && b.dataset.type === 'wunsch';
+    b.setAttribute('aria-checked', String(b.dataset.type === type));
+  }
+  $('report-kind-label').textContent = wish ? 'Art der Idee' : ask ? 'Worum geht es?' : 'Art des Fehlers';
+  $('report-text-label').firstChild.textContent = wish ? 'Was wünschst du dir? ' : ask ? 'Deine Frage ' : 'Was ist falsch? ';
+  $('report-text').placeholder = wish ? 'z. B. Ein Modul zu Bremsen wäre super, weil …' : ask ? 'z. B. Warum gilt hier § 70 StVZO und nicht § 46 StVO?' : 'z. B. Der Grenzwert ist seit 2021 ein anderer: …';
   const info = $('report-card-info');
   info.hidden = !card;
   if (card) {
     const q = plainText(card.q);
     info.innerHTML = `<b>${esc(card.deck.replace(/::/g, ' › '))}</b><br>${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}`;
   }
-  $('report-kind').innerHTML = (wish ? WISH_KINDS : REPORT_KINDS.filter((k) => card || !k.startsWith('Bild')))
+  $('report-kind').innerHTML = (wish ? WISH_KINDS : ask ? QUESTION_KINDS : REPORT_KINDS.filter((k) => card || !k.startsWith('Bild')))
     .map((k) => `<option>${esc(k)}</option>`).join('');
-  if (!card && !wish) $('report-kind').value = 'App funktioniert nicht richtig';
+  if (!card && type === 'fehler') $('report-kind').value = 'App funktioniert nicht richtig';
   $('report-text').value = '';
   $('report-error').hidden = true;
-  $('report-hint').textContent = 'Die Meldung geht direkt an die Akademie. Ohne Internet öffnet sich stattdessen eine vorbereitete E-Mail.';
+  $('report-hint').textContent = ask ? 'Deine Frage geht direkt an die Akademie. Die Antwort findest du unter ⋮ → „Meine Rückmeldungen“.'
+    : 'Die Meldung geht direkt an die Akademie. Ohne Internet öffnet sich stattdessen eine vorbereitete E-Mail.';
+  $('report-send').textContent = ask ? 'Frage senden' : 'Meldung senden';
   $('report').hidden = false;
   $('report-text').focus();
 }
@@ -1568,7 +1579,7 @@ async function sendReport(e) {
   }
   const kind = $('report-kind').value;
   const subject = reportCard
-    ? `Karteikarten-App: Fehler in Karte (${deckLabel(reportCard.deck)})`
+    ? `Karteikarten-App: ${reportType === 'frage' ? 'Frage zu' : 'Fehler in'} Karte (${deckLabel(reportCard.deck)})`
     : `Karteikarten-App: ${kind}`;
   const body = reportBody(kind, text);
   $('report-send').disabled = true;
@@ -1589,6 +1600,7 @@ async function sendReport(e) {
     if (token) save(KEY_MINE, [...load(KEY_MINE, []), { token, type: reportType, kind, text: text.slice(0, 200), created: Date.now() }]);
     toast(reportType === 'wunsch'
       ? 'Danke für deine Idee! Die Antwort siehst du unter „Meine Rückmeldungen“.'
+      : reportType === 'frage' ? 'Danke für deine Frage! Die Antwort siehst du unter „Meine Rückmeldungen“.'
       : 'Danke! Deine Meldung ist angekommen. Die Antwort siehst du unter „Meine Rückmeldungen“.');
     $('report').hidden = true;
     return;
@@ -1762,6 +1774,7 @@ function wiggle() {
 function bind() {
   $('btn-show').addEventListener('click', showAnswer);
   $('btn-report-card').addEventListener('click', () => openReport(state.current));
+  $('btn-ask-card').addEventListener('click', () => openReport(state.current, 'frage'));
   $('btn-pause-card').addEventListener('click', pauseCurrent);
   $('btn-star').addEventListener('click', toggleStar);
   let searchTimer;
@@ -1784,7 +1797,7 @@ function bind() {
     const b = e.target.closest('button[data-type]');
     if (!b || b.dataset.type === reportType) return;
     const text = $('report-text').value;
-    openReport(null, b.dataset.type);
+    openReport(reportCard, b.dataset.type);
     $('report-text').value = text;   // bereits Geschriebenes behalten
   });
   $('report-text').addEventListener('input', () => { $('report-error').hidden = true; });
