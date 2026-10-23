@@ -33,7 +33,7 @@
   "related_applications": [
     {
       "platform": "webapp",
-      "url": "https://karteikartents.github.io/KarteikartenInhalte/manifest.webmanifest"
+      "url": "manifest.webmanifest"
     }
   ]
 }
